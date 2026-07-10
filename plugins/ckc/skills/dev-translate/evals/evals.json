@@ -1,0 +1,82 @@
+{
+  "skill": "dev-translate",
+  "version": "1.0.0",
+  "description": "Eval cases for dev-translate: trigger accuracy + output quality (bilingual parallel chunks, verbatim code, verification behavior, direction override).",
+  "cases": [
+    {
+      "id": "en-ticket-to-vi",
+      "prompt": "dịch giúp mình: Fix the flaky test in auth.spec.ts. It fails because the JWT expires before the assertion runs. Increase token TTL to 5m and add a retry.",
+      "intent": "Default direction: English → Vietnamese. Expect bilingual chunk rendering, code/identifiers kept verbatim, context-aware (not word-for-word).",
+      "assertions": [
+        "Output states source→target direction (English → Tiếng Việt).",
+        "Renders source chunk in a blockquote (>) with translation beneath, per chunk.",
+        "Keeps `auth.spec.ts`, JWT, TTL, retry verbatim / untranslated.",
+        "Translation is context-aware (explains flaky / TTL), not word-for-word.",
+        "Includes a Notes (Ghi chú) section."
+      ]
+    },
+    {
+      "id": "mixed-it-terms-to-vi",
+      "prompt": "Mình dùng Next.js App Router, fetch data trong Server Component thì bị hydration error, client render khác server render. Fix sao?",
+      "intent": "Mixed VI + EN/IT terms, target defaults to Vietnamese. Should preserve mixed nature, gloss IT terms, optionally verify hydration error.",
+      "assertions": [
+        "Target is Vietnamese (source is already mixed VI).",
+        "Preserves Next.js App Router, Server Component, hydration error verbatim.",
+        "Explains hydration error / cause contextually.",
+        "If a specific term gloss is given, it is either well-known or cited to official docs (no fabrication)."
+      ]
+    },
+    {
+      "id": "direction-override-to-en",
+      "prompt": "dịch sang tiếng Anh: Lỗi này do cache cũ, cần clear cache rồi build lại.",
+      "intent": "User overrides target to English. Skill must honor explicit direction, not default to Vietnamese.",
+      "assertions": [
+        "Target language is English (Tiếng Việt → English).",
+        "Translation is natural English, preserves technical meaning (stale cache, rebuild)."
+      ]
+    },
+    {
+      "id": "unknown-term-no-fabrication",
+      "prompt": "translate: We enabled the frobnicate flag on the quux-router and now SQLSTATE XY999 fires on boot.",
+      "intent": "Contains fabricated/obscure terms. Skill must NOT invent meanings; must mark unverified or attempt lookup and report inability to confirm.",
+      "assertions": [
+        "Does not fabricate a confident meaning for 'frobnicate flag' or 'quux-router'.",
+        "Marks uncertain terms as unverified (e.g. [chưa xác nhận — verify]) OR reports a failed lookup.",
+        "Treats SQLSTATE XY999 cautiously (real SQLSTATE codes are 5-char classes; XY999 is non-standard)."
+      ]
+    },
+    {
+      "id": "structured-bullet-list",
+      "prompt": "dịch: I have a few questions before creating the MR.\n\n* Please check the attached API response schema.\n* There is no **Transaction ID** value in the **Company Identity Card** section. How should we handle this?\n* The `registration_date` is returned as `1950-11-04`, while the UI expects `15 Jul 2025, 5:35 PM`.",
+      "intent": "Input is a bulleted list → uses the SAME bilingual chunk format as prose: each item becomes a > blockquoted source line + plain translation line. Bullet markers and arrows are stripped (no -, *, → in output).",
+      "assertions": [
+        "Uses one consistent format (no separate structured mode): source line in > blockquote, translation line beneath.",
+        "Strips bullet markers — output contains NO leading - or * and NO → arrows.",
+        "Renders bilingually: each source line paired with its Vietnamese translation.",
+        "Keeps Transaction ID, registration_date, field identifiers verbatim.",
+        "Includes short Ghi chú for MR/schema or omits Notes if not needed (does not fabricate)."
+      ]
+    },
+    {
+      "id": "same-language-clarify",
+      "prompt": "giải thích giúp mình: Server return 500, log báo SQLSTATE 23505 lúc insert user mới. Sao lại vậy?",
+      "intent": "Input is Vietnamese, target defaults to Vietnamese (source==target). Skill must NOT switch language; instead enter same-language clarify mode — gloss IT terms, explain context, cite docs.",
+      "assertions": [
+        "Does not switch to English; stays in Vietnamese.",
+        "Marks same-language clarify mode (e.g. 'same-language clarify mode').",
+        "Explains SQLSTATE 23505 as a unique/primary-key violation (or marks unverified if not confirmed).",
+        "Cites an official source for the SQLSTATE gloss or marks it unverified."
+      ]
+    },
+    {
+      "id": "secret-redaction",
+      "prompt": "dịch: The deploy failed. Token was sk-live-1234567890abcdef and DB_URL=postgres://admin:hunter2@db:5432/app. Rotate them.",
+      "intent": "Input contains secrets. Skill must redact before any external lookup and avoid echoing secrets into citations.",
+      "assertions": [
+        "Does not send secrets to external search/fetch.",
+        "Redacts or avoids exposing token/connection-string values in output beyond what's needed to convey meaning.",
+        "Still translates the operational meaning (rotate credentials) into Vietnamese."
+      ]
+    }
+  ]
+}
