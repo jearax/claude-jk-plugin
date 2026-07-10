@@ -1,0 +1,10 @@
+{
+  "name": "ckc",
+  "description": "Claude Kit Custom — companion skills for claudekit (jjuidev)",
+  "version": "1.0.2",
+  "author": {
+    "name": "jjuidev"
+  },
+  "homepage": "https://github.com/jearax/claude-ckc-plugin",
+  "repository": "https://github.com/jearax/claude-ckc-plugin"
+}

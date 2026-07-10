@@ -1,0 +1,13 @@
+{
+	"name": "ckc-marketplace",
+	"owner": {
+		"name": "jjuidev"
+	},
+	"plugins": [
+		{
+			"name": "ckc",
+			"source": "./plugins/ckc",
+			"description": "Claude Kit Custom — companion skills for claudekit"
+		}
+	]
+}
