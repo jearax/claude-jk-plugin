@@ -1,0 +1,10 @@
+{
+  "name": "jk",
+  "description": "jjuidev Kit — companion skills for Claude Code (jjuidev)",
+  "version": "2.0.0",
+  "author": {
+    "name": "jjuidev"
+  },
+  "homepage": "https://github.com/jearax/claude-jk-plugin",
+  "repository": "https://github.com/jearax/claude-jk-plugin"
+}

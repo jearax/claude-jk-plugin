@@ -1,5 +1,5 @@
 ---
-name: ckc:learn
+name: jk:learn
 description: "Learn technologies, libraries, frameworks through structured research. Use when user says 'learn X', 'tell me about X', 'overview of X', 'detail X', 'cheatsheet X', 'full X', or provides a URL. Generates comparisons, code examples, cheat sheets."
 argument-hint: "[quick|full|detail|overview|cheatsheet] [topic-or-url] [--md|--html]"
 metadata:
@@ -7,7 +7,7 @@ metadata:
   version: "1.0.0"
 ---
 
-# /ckc:learn — Quick Learn Skill
+# /jk:learn — Quick Learn Skill
 
 Learn a new library, framework, or technology through one command. Auto-research, compare alternatives, synthesize use cases, and generate cheat sheets.
 
@@ -27,7 +27,7 @@ Learn a new library, framework, or technology through one command. Auto-research
 
 ```mermaid
 flowchart TD
-    A["User: /ckc:learn {args}"] --> B["Run classify-input.py"]
+    A["User: /jk:learn {args}"] --> B["Run classify-input.py"]
     B --> C{"Mode?"}
     C -->|none| D["AskUserQuestion"]
     C -->|quick (default)| E["Light research → MD terminal"]

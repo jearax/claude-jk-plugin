@@ -1,4 +1,4 @@
-# dev-translate
+# translate
 
 Context-aware translator for developer / IT content. Translates English or mixed-language tech text (error messages, GitHub issues, task & ticket descriptions, docs, PR titles, release notes, stack/code/config snippets) into clear, technically accurate **Vietnamese** — explaining the underlying tech instead of translating word-for-word. Output is a **bilingual, side-by-side** rendering designed for studying a foreign tech text.
 
@@ -13,7 +13,7 @@ Context-aware translator for developer / IT content. Translates English or mixed
 ## Structure
 
 ```
-dev-translate/
+translate/
 ├── SKILL.md                              # Core workflow, scope, security
 ├── references/
 │   ├── term-verification.md              # When/how to look up + cite + fallback
@@ -28,7 +28,7 @@ dev-translate/
 This skill is instruction-only (no build step). To install into `~/.claude/skills/`:
 
 ```bash
-cp -R dev-translate ~/.claude/skills/
+cp -R translate ~/.claude/skills/
 # or via Claude Code skill management
 ```
 

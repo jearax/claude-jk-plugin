@@ -1,7 +1,7 @@
 {
-  "skill": "dev-translate",
+  "skill": "translate",
   "version": "1.0.0",
-  "description": "Eval cases for dev-translate: trigger accuracy + output quality (bilingual parallel chunks, verbatim code, verification behavior, direction override).",
+  "description": "Eval cases for translate: trigger accuracy + output quality (bilingual parallel chunks, verbatim code, verification behavior, direction override).",
   "cases": [
     {
       "id": "en-ticket-to-vi",

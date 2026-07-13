@@ -1,5 +1,5 @@
 ---
-name: ckc:dev-translate
+name: jk:translate
 description: Context-aware translator for developer and IT content. Translates English or mixed-language text (with IT terms, stack names, code, error messages, GitHub issues, task/ticket descriptions, docs, PR titles, release notes) into clear, technically accurate Vietnamese — explaining the underlying tech instead of word-for-word translation. Use this skill whenever the user pastes or quotes English/mixed tech content and wants it in Vietnamese, or says "dịch", "translate", "giải thích", "nghĩa là gì", "cho mình hiểu", or wants a bilingual side-by-side study view. Verifies uncertain IT terms against official docs and never fabricates. Default source: English + mixed Vietnamese/IT terms; default target: Vietnamese. Direction is overridable by the user.
 argument-hint: "[text-to-translate]"
 license: MIT
@@ -8,7 +8,7 @@ metadata:
   version: "1.0.0"
 ---
 
-# dev-translate
+# translate
 
 Context-aware translator for developer / IT content. Produces a **bilingual, side-by-side** rendering of English or mixed-language tech text into clear Vietnamese — translating *meaning and intent*, not words. Uncertain IT terms are verified against official docs; nothing is invented.
 
