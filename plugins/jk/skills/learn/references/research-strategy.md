@@ -4,12 +4,13 @@ Defines research orchestration for each mode. Execute in order: Phase A → B �
 
 ## Phase A: Official Docs (all modes)
 
-1. Activate `docs-seeker` skill with topic name → fetch official documentation
-   - Command: invoke `/ck:docs-seeker` with `"{topic}"`
-   - Extracts API reference, guides, quickstart from official docs
+1. Fetch official documentation for the topic:
+   - **Preferred:** invoke docs-seeker skill (`/ak:docs-seeker`) with `"{topic}"` if registered → extracts API reference, guides, quickstart.
+   - **Fallback:** `WebSearch("{topic} official documentation")` → `WebFetch(<official-doc-url>)` on the canonical docs site. Extract API reference, guides, quickstart manually.
+   - (See SKILL.md "Dependencies & Fallback" for the detection rule.)
 2. If URL was provided (from input routing):
-   - Already fetched via `mcp__web_reader__webReader` in input routing step
-   - Use this as primary source, supplement with docs-seeker results
+   - Already fetched via `mcp__web_reader__webReader` (fallback: `WebFetch`) in input routing step
+   - Use this as primary source, supplement with the Phase A docs fetch above
 
 ## Phase B: Web Research (parallel WebSearch calls)
 
@@ -62,10 +63,10 @@ When multiple sources conflict, **official docs always win**.
 
 | Mode | Max Research Tokens | Sources |
 |------|--------------------|---------|
-| quick | Minimal (~1 search) | 1 search + docs-seeker |
-| overview | Low (~2 searches) | 1 search + docs-seeker |
-| cheatsheet | Low (~2 searches) | 2 searches + docs-seeker |
-| full | Medium (~3 searches) | 3 searches + docs-seeker |
-| detail | High (~4 searches) | 4 searches + docs-seeker |
+| quick | Minimal (~1 search) | 1 search + docs fetch |
+| overview | Low (~2 searches) | 1 search + docs fetch |
+| cheatsheet | Low (~2 searches) | 2 searches + docs fetch |
+| full | Medium (~3 searches) | 3 searches + docs fetch |
+| detail | High (~4 searches) | 4 searches + docs fetch |
 
 Keep research focused — prefer depth on target topic over breadth of alternatives.

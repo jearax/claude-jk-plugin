@@ -23,6 +23,20 @@ Learn a new library, framework, or technology through one command. Auto-research
 
 **Override flags**: `--html` forces HTML, `--md` forces MD terminal.
 
+## Dependencies & Fallback
+
+`jk:learn` is **standalone** — it works with only built-in tools. Companion skills from claudekit/AgentKit are used when available for richer output; each has a built-in fallback. Resolve in order (preferred → fallback):
+
+| Capability | Preferred (if registered in runtime) | Fallback (always available) |
+|---|---|---|
+| Official docs fetch | `/ak:docs-seeker` skill | `WebSearch` + `WebFetch(<official-doc-url>)` |
+| URL → markdown | `mcp__web_reader__webReader` MCP tool | `WebFetch(<url>)` |
+| MD → HTML render | `html-anything` skill | Write minimal self-contained HTML (`<!doctype html>…<pre>{md}</pre>…`) to `./{topic}-learn.html`, or fall back to `--md` terminal output |
+| Visual analysis | `ai-multimodal` skill | Skip (optional — only when visual context adds value) |
+| Python (input classifier) | `~/.claude/skills/.venv/bin/python3` | `python3` (script is stdlib-only) |
+
+**Detection rule:** before invoking a preferred capability, check whether the skill / slash command / MCP tool is registered in the current runtime. If not, use the fallback column **silently** — do not error, warn, or ask the user. Never block on a missing companion skill.
+
 ## Process Flow
 
 ```mermaid
@@ -45,8 +59,11 @@ flowchart TD
 Run the classifier script to parse user input:
 
 ```bash
-# Path relative to this SKILL.md folder
-~/.claude/skills/.venv/bin/python3 scripts/classify-input.py "$ARGUMENTS"
+# Path relative to this SKILL.md folder.
+# Script is stdlib-only (sys, re, json) — any python3 works.
+# Prefer shared claudekit venv if present, else system python3.
+~/.claude/skills/.venv/bin/python3 scripts/classify-input.py "$ARGUMENTS" 2>/dev/null \
+  || python3 scripts/classify-input.py "$ARGUMENTS"
 ```
 
 > Resolve `scripts/classify-input.py` to absolute path of this skill folder before executing. The skill folder is the directory containing this SKILL.md (auto-detected by the agent runtime).
@@ -102,7 +119,7 @@ If `html: false` (quick, overview modes, or `--md` flag):
 
 ## Workflow Position
 
-**Related skills (from claudekit, required as prerequisite):**
-- `docs-seeker` — fetches official documentation
-- `html-anything` — renders MD to HTML
-- `ai-multimodal` — can supplement with visual analysis if needed
+**Related skills (optional — from claudekit/AgentKit, with built-in fallbacks, see Dependencies & Fallback above):**
+- `docs-seeker` — fetches official documentation (fallback: `WebSearch` + `WebFetch`)
+- `html-anything` — renders MD to HTML (fallback: minimal inline HTML or `--md` terminal)
+- `ai-multimodal` — can supplement with visual analysis if needed (fallback: skip)
