@@ -5,7 +5,7 @@ argument-hint: "[text-to-translate]"
 license: MIT
 metadata:
   author: jjuidev
-  version: "1.0.0"
+  version: "1.1.0"
 ---
 
 # translate
@@ -50,6 +50,13 @@ Split into **meaningful units** — one sentence, or a short paragraph that carr
 
 Aim for chunks of reasonable length (1–3 sentences). Never split a sentence mid-way just to balance size.
 
+**Code blocks are ONE atomic chunk — never split them line-by-line.** A "code block" is any of:
+- Fenced code (` ``` ` / `~~~`) or 4-space-indented code
+- A stack trace / traceback / multi-line error log
+- A JSON / YAML / TOML / `.env` / config snippet
+
+A whole code block = one chunk. Do **not** render each line as a separate `>` blockquote + translation pair (that duplicates every line). See step 6 for how a code chunk is rendered differently from prose.
+
 ### 3. Scan for IT signal
 Flag framework names, libraries, error/status codes, API terms, CLI flags, config keys, version-specific behavior, niche library semantics. These drive the verification step.
 
@@ -68,12 +75,18 @@ See `references/term-verification.md`. In short:
 ### 6. Render bilingual chunk output
 See `references/output-format-and-examples.md` for the exact template and full examples.
 
-Use **ONE consistent format for all input** (prose or list):
+There are **two chunk types**, rendered differently:
+
+**Type A — Prose / list chunk** (default): the source line in a `>` blockquote, then the translation line directly beneath it (plain text).
+
+**Type B — Code block chunk** (fenced code, stack trace, config — see step 2): render the **whole block verbatim inside a fenced ` ``` ` block**, language tag preserved. Do **NOT** wrap it in `>` blockquote, do **NOT** pair it with a per-line translation — that duplicates every line. Optionally precede it with one short Vietnamese gloss line (e.g. "Đây là component Button:") explaining what the code does; skip the gloss if the surrounding prose already conveys the meaning. Inline comments inside the code (`//`, `#`) stay **verbatim** — never translate them; the code must stay copy-pasteable. Any deeper explanation of the code goes in `📝 Ghi chú`, not in the body.
+
+For prose/list input use **ONE consistent format**:
 
 - **Chunk** = one sentence, OR — for list input — one list item. When chunking a list item, **strip the bullet/number marker** (`-`, `*`, `+`, `1.`) so the output line is plain. Output must contain **no bullet markers, no arrows (`→`)** — just two plain parallel lines per chunk.
-- Each chunk renders as: the source line in a `>` blockquote, then the translation line directly beneath it (plain text). One blank line between chunk pairs.
+- Each prose chunk renders as: the source line in a `>` blockquote, then the translation line directly beneath it (plain text). One blank line between chunk pairs.
 
-Structure:
+Structure (prose chunks):
 
 ```
 🌐 source → target
@@ -96,7 +109,8 @@ End with a **Ghi chú** section: verified-term glossary + source citations. Omit
 ## Output Rules (console-readable)
 
 - Use simple ASCII separators (`─────`), not heavy box-drawing that wraps badly in narrow terminals.
-- Every chunk = `>` blockquoted source line + plain translation line beneath. No bullets, no arrows, ever.
+- Every **prose/list** chunk = `>` blockquoted source line + plain translation line beneath. No bullets, no arrows, ever.
+- **Code-block** chunk = the whole block rendered verbatim inside a fenced ` ``` ` block (language tag kept). Never `>`-blockquote it, never pair each line with a translation — that duplicates lines. Inline comments (`//`, `#`) stay verbatim.
 - Strip list markers (`-`/`*`/`+`/`1.`) from source lines before quoting — render them as plain lines.
 - Keep `**bold**` and `` `code` `` spans inside lines; keep code/paths/identifiers verbatim, never translated.
 - If the input is very long, summarize structure first (one line), then render. Offer to continue if truncated.

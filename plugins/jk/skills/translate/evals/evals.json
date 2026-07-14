@@ -1,6 +1,6 @@
 {
   "skill": "translate",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Eval cases for translate: trigger accuracy + output quality (bilingual parallel chunks, verbatim code, verification behavior, direction override).",
   "cases": [
     {
@@ -76,6 +76,29 @@
         "Does not send secrets to external search/fetch.",
         "Redacts or avoids exposing token/connection-string values in output beyond what's needed to convey meaning.",
         "Still translates the operational meaning (rotate credentials) into Vietnamese."
+      ]
+    },
+    {
+      "id": "code-block-verbatim-no-duplication",
+      "prompt": "dịch: Here's the confirm button. Use this:\n\n<Button\n  variant=\"primary\"\n  size=\"large\"\n  sx={{ marginTop: '32px', borderRadius: '100%' }}\n>\n  Confirm & Proceed\n</Button>\n\nIt should sit at the top of the modal.",
+      "intent": "Input contains a multi-line code block (JSX). A code block is one atomic chunk rendered verbatim inside a fenced code block — it must NOT be split line-by-line into > blockquote + translation pairs, which would duplicate every line.",
+      "assertions": [
+        "Renders the whole <Button>...</Button> block exactly ONCE inside a fenced code block (```), with the jsx language tag kept.",
+        "Output contains NO duplicated code lines — no '<Button <Button' or 'variant=\"primary\" variant=\"primary\"' patterns.",
+        "The code block is NOT wrapped in a > blockquote and is NOT paired with a per-line translation.",
+        "Prose around the code ('Here's the confirm button', 'It should sit at the top of the modal') still uses the > blockquote source + plain Vietnamese translation format.",
+        "Code identifiers (variant, size, sx, marginTop, borderRadius) and string values ('Confirm & Proceed') are kept verbatim."
+      ]
+    },
+    {
+      "id": "code-block-inline-comments-verbatim",
+      "prompt": "translate: Here's the config. Set the timeout and retry:\n\nconst client = new Client({\n  timeout: 5000, // set timeout to 5s\n  retries: 3      // TODO: bump after testing\n});\n\nIt applies to all requests.",
+      "intent": "Input code block contains English inline comments. Comments inside code must stay verbatim (never translated in place) so the code stays copy-pasteable; deeper explanation goes to Ghi chú if needed.",
+      "assertions": [
+        "Renders the const client block once inside a fenced code block, verbatim.",
+        "Inline comments '// set timeout to 5s' and '// TODO: bump after testing' are kept EXACTLY as-is in English (not translated to Vietnamese in place).",
+        "No code line is duplicated.",
+        "Prose around the code uses the > blockquote + translation pair."
       ]
     }
   ]

@@ -10,11 +10,18 @@ The bilingual rendering spec. Console-first: ASCII separators, blockquote for so
 # 🔍 same-language clarify mode (<lang> → <lang>)
 
 ──────────────────────────────
-> <source chunk 1>
-<target chunk 1>
+> <source chunk 1>          # prose chunk: > blockquote source line
+<target chunk 1>            # + plain translation line beneath
 
 > <source chunk 2>
 <target chunk 2>
+
+# Code-block chunk (whole block verbatim, NOT > blockquoted, NOT line-translated):
+<gloss line (optional)>
+
+```<lang>
+<code block, verbatim>
+```
 
 ...
 ──────────────────────────────
@@ -28,10 +35,11 @@ The bilingual rendering spec. Console-first: ASCII separators, blockquote for so
 ## Rules
 
 - One blank line between each source/translation pair.
-- Source chunk always in a `>` blockquote; translation as plain text beneath.
-- Keep code, file paths, URLs, identifiers, error codes **verbatim** — never translate them.
+- **Prose/list chunk**: source line in a `>` blockquote; translation as plain text beneath.
+- **Code-block chunk** (fenced code, stack trace, traceback, multi-line log, JSON/YAML/TOML/`.env`/config snippet): the whole block is one chunk. Render it **verbatim inside a fenced ` ``` ` block** (keep the language tag). Do **NOT** wrap it in `>` blockquote and do **NOT** emit a per-line translation — that duplicates every line. A multi-line code block is never split into line-by-line chunks.
+- Keep code, file paths, URLs, identifiers, error codes **verbatim** — never translate them. Inline comments inside code (`//`, `#`) stay verbatim too; the code must remain copy-pasteable.
 - On first use of a non-obvious IT term, you may add a short gloss in parentheses: `hook (móc nối)`.
-- Code blocks inside a chunk: keep fenced (` ``` `), place the whole block inside the chunk.
+- Before a code-block chunk you may add one short Vietnamese gloss line (e.g. "Đây là component Button:") explaining what it does; skip it if surrounding prose already conveys the meaning.
 - Separator width stays constant (e.g. 30 `─`). Use plain ASCII `─` is fine on modern terminals; if unsure, use `----`.
 - End with **📝 Ghi chú** (Notes): verified terms + sources. Omit `⚠️ Chưa xác nhận` if none.
 
@@ -164,6 +172,59 @@ Rules:
 - Never use `-`, `*`, `+`, `1.`, or `→` in the output.
 - Keep `**bold**` and `` `code` `` spans; keep identifiers verbatim.
 - One source item → one source line + one translation line.
+
+## Example 6 — Input contains a code block (rendered verbatim, never duplicated)
+
+A code block is one atomic chunk. Render the **whole block verbatim inside a fenced ` ``` ` block** — do NOT `>`-blockquote it, do NOT emit a per-line translation (that would duplicate every line). Optionally precede it with a short Vietnamese gloss line.
+
+Input:
+```
+Translate this: Here's the confirm button. Use this:
+
+<Button
+  variant="primary"
+  size="large"
+  sx={{ marginTop: '32px', borderRadius: '100%' }}
+>
+  Confirm & Proceed
+</Button>
+
+It should sit at the top of the modal.
+```
+
+Output:
+```
+🌐 English → Tiếng Việt
+
+────────────────────────────
+> Here's the confirm button. Use this:
+Đây là nút confirm (xác nhận). Dùng như sau:
+
+Đây là component Button:
+
+```jsx
+<Button
+  variant="primary"
+  size="large"
+  sx={{ marginTop: '32px', borderRadius: '100%' }}
+>
+  Confirm & Proceed
+</Button>
+```
+
+> It should sit at the top of the modal.
+Nó nên nằm ở đầu modal (hộp thoại nổi).
+────────────────────────────
+
+📝 Ghi chú
+- MUI sx prop — prop nhận object style động cho component  [src: https://mui.com/system/the-sx-prop/]
+```
+
+Rules:
+- The JSX block is rendered **once**, verbatim, fenced with `jsx` tag. No line is repeated.
+- Prose around the code still uses the `>` blockquote + translation pair.
+- The optional gloss line ("Đây là component Button:") is plain text, not `>`-quoted.
+- Inline comments inside code (none here) would stay verbatim — never translated in place.
 
 ## Long Input
 
