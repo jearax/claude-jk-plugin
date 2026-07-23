@@ -59,6 +59,7 @@ Default mode is `copy`. To re-install after updates, re-run the command.
 |---|---|
 | `jk:learn` | Learn a library/framework via structured research. Modes: `quick`, `full`, `detail`, `overview`, `cheatsheet`. Supports URL input and `--md`/`--html` output. |
 | `jk:translate` | Context-aware bilingual translator (EN/mixed → Vietnamese) for dev/IT content — error messages, tickets, docs, PRs. Verifies uncertain IT terms against official docs. Output: parallel EN↔VI chunks, console-readable. |
+| `jk:chat2k` | Chat-to-Knowledge — extract *decided* knowledge (topics compared, pros/cons, use cases, decisions, verified links) from any CLI chat session (claude, opencode, codex, cursor) into a beautiful Markdown note. Filters noise, never dumps transcripts. |
 
 ## Usage examples
 
@@ -69,6 +70,10 @@ Default mode is `copy`. To re-install after updates, re-run the command.
 /jk:learn https://orm.drizzle.team/docs/overview
 
 /jk:translate Fix the flaky test in auth.spec.ts. The JWT expires before the assertion runs.
+
+/jk:chat2k --current
+/jk:chat2k --from /path/to/session.jsonl --out ~/notes/auth-review.md
+/jk:chat2k --current --marks "auth,deployment"
 ```
 
 ## Migrating from `ckc` (v1.x → v2.0.0)
@@ -111,6 +116,12 @@ plugins/
       translate/
         SKILL.md            # name: jk:translate
         references/
+        evals/
+      chat2k/
+        SKILL.md            # name: jk:chat2k
+        references/
+        scripts/
+        tests/
         evals/
 ```
 
