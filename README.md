@@ -60,6 +60,7 @@ Default mode is `copy`. To re-install after updates, re-run the command.
 | `jk:learn` | Learn a library/framework via structured research. Modes: `quick`, `full`, `detail`, `overview`, `cheatsheet`. Supports URL input and `--md`/`--html` output. |
 | `jk:translate` | Context-aware bilingual translator (EN/mixed → Vietnamese) for dev/IT content — error messages, tickets, docs, PRs. Verifies uncertain IT terms against official docs. Output: parallel EN↔VI chunks, console-readable. |
 | `jk:chat2k` | Chat-to-Knowledge — extract *decided* knowledge (topics compared, pros/cons, use cases, decisions, verified links) from any CLI chat session (claude, opencode, codex, cursor) into a beautiful Markdown note. Filters noise, never dumps transcripts. |
+| `jk:leetcode-problem` | LeetCode practice scaffolder — research a problem by id/slug/URL, generate empty `solve`/`solve2`/… stubs with rich doc comments (summary, happy-case example, complexity ladder, keywords) + failing tests — identically for every language app in the practice repo. Remembers the active problem + chat language for the session. `--explain` = adaptive guided discussion until the user understands, then offers to scaffold. |
 
 ## Usage examples
 
@@ -74,6 +75,10 @@ Default mode is `copy`. To re-install after updates, re-run the command.
 /jk:chat2k --current
 /jk:chat2k --from /path/to/session.jsonl --out ~/notes/auth-review.md
 /jk:chat2k --current --marks "auth,deployment"
+
+/jk:leetcode-problem 217
+/jk:leetcode-problem two-sum
+/jk:leetcode-problem --explain
 ```
 
 ## Migrating from `ckc` (v1.x → v2.0.0)
@@ -123,6 +128,10 @@ plugins/
         scripts/
         tests/
         evals/
+      leetcode-problem/
+        SKILL.md            # name: jk:leetcode-problem
+        references/
+        scripts/
 ```
 
 Marketplace containing a single plugin (`jk`). Add more plugins under `plugins/<name>/` and register in `.claude-plugin/marketplace.json`.
