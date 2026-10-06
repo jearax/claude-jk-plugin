@@ -57,7 +57,7 @@ Default mode is `copy`. To re-install after updates, re-run the command.
 
 | Skill | Description |
 |---|---|
-| `jk:learn` | Learn a library/framework via structured research. Modes: `quick`, `full`, `detail`, `overview`, `cheatsheet`. Supports URL input and `--md`/`--html` output. |
+| `jk:learn` | Learn a library/framework/concept via structured research. Each mode answers one question: `overview` (default — what it is, should I use it), `usage` (how to use it), `workflow` (one real task end to end), `internals` (how it works inside), `cheatsheet` (API lookup), `docs` (official reading map). `--eli<N>` adjusts any mode to reader level N; alone, it explains the topic from zero. Supports URL input and `--md`/`--html` output. |
 | `jk:translate` | Context-aware bilingual translator (EN/mixed → Vietnamese) for dev/IT content — error messages, tickets, docs, PRs. Verifies uncertain IT terms against official docs. Output: parallel EN↔VI chunks, console-readable. |
 | `jk:chat2k` | Chat-to-Knowledge — turn the running chat session (or a transcript from claude, opencode, codex, cursor) into a beautiful Markdown note. Give a free-text focus to extract just one topic from a long multi-topic session; without one it keeps *decided* knowledge (comparisons, pros/cons, use cases, decisions, verified links). Filters noise, never dumps transcripts. |
 | `jk:leetcode-problem` | LeetCode practice scaffolder — research a problem by id/slug/URL, generate empty `solve`/`solve2`/… stubs with rich doc comments (summary, happy-case example, complexity ladder, keywords) + failing tests — identically for every language app in the practice repo. Remembers the active problem + chat language for the session. `--explain` = adaptive guided discussion until the user understands, then offers to scaffold. |
@@ -66,9 +66,14 @@ Default mode is `copy`. To re-install after updates, re-run the command.
 
 ```text
 /jk:learn nextjs
-/jk:learn full tanstack-router
+/jk:learn usage tanstack-router
+/jk:learn workflow auth with better-auth
+/jk:learn internals react hooks
 /jk:learn cheatsheet zod
-/jk:learn https://orm.drizzle.team/docs/overview
+/jk:learn docs nextjs
+/jk:learn event loop --eli5
+/jk:learn internals tcp --eli15
+/jk:learn usage https://orm.drizzle.team/docs/overview
 
 /jk:translate Fix the flaky test in auth.spec.ts. The JWT expires before the assertion runs.
 

@@ -1,6 +1,6 @@
 # Output Template: Overview Mode
 
-Use this template when `mode: overview`. Lightweight, decision-focused output.
+Use this template when `mode: overview` (default). Answers one question: **"What is it, and should I use it?"** Decision-focused, short, no code.
 
 ## Template Structure
 
@@ -10,50 +10,51 @@ Use this template when `mode: overview`. Lightweight, decision-focused output.
 ## TL;DR
 - **What**: {1-line definition}
 - **Problem it solves**: {1-2 lines on the core problem}
-- **When to use**: {1 line on best-fit scenarios}
+- **Best fit**: {1 line on best-fit scenarios}
 
-## When to Use / When NOT to Use
+## Core Concepts
+{Optional context map: where the topic sits — see visuals.md}
+
+- **{Concept 1}**: {1-line meaning}
+- **{Concept 2}**: {1-line meaning}
+- **{Concept 3}**: {1-line meaning}
+
+## When to Use / When Not to Use
 
 ### Use {Topic} when:
-- {bullet point 1}
-- {bullet point 2}
-- {bullet point 3}
+- {situation 1}
+- {situation 2}
+- {situation 3}
 
 ### Consider alternatives when:
-- {bullet point 1}
-- {bullet point 2}
-- {bullet point 3}
+- {situation 1}
+- {situation 2}
 
 ## Comparison with Alternatives
-| Feature | {Topic} | {Alt 1} | {Alt 2} | {Alt 3} |
-|---------|---------|---------|---------|---------|
-| {Feature 1} | ... | ... | ... | ... |
-| Learning Curve | ... | ... | ... | ... |
-| Community | ... | ... | ... | ... |
+| Criterion | {Topic} | {Alt 1} | {Alt 2} | {Alt 3} |
+|-----------|---------|---------|---------|---------|
+| {Criterion 1} | ... | ... | ... | ... |
+| Learning curve | ... | ... | ... | ... |
+| Community / maturity | ... | ... | ... | ... |
 
-**When to choose {Topic}:** {2-3 bullet points}
-**When to choose alternatives:** {brief guidance}
+**Choose {Topic} when:** {1-2 bullet points}
+**Choose an alternative when:** {brief guidance}
+
+## Next Steps
+- How to use it: `/jk:learn usage {topic}`
+- How it works inside: `/jk:learn internals {topic}`
+- What to read in the official docs: `/jk:learn docs {topic}`
 ```
 
 ## Section Guidelines
 
-- **TL;DR**: Same as full mode — scannable in 10 seconds.
-- **When to Use/NOT**: Decision matrix format. Help reader decide quickly.
-- **Comparison**: Minimum 3 alternatives. Same table as full mode.
-- **No code examples** — overview is for decision-making, not implementation.
-- **No cheat sheet** — too detailed for overview context.
+- **TL;DR**: scannable in 10 seconds.
+- **Visuals**: follow `visuals.md`; the comparison table is the primary visual.
+- **Core concepts**: 3-5 names the reader will meet everywhere in the docs. Name and one-line meaning only; how they work belongs to `internals`.
+- **When to use / not**: a decision matrix. Each bullet is a concrete situation, not a generic quality ("fast", "easy").
+- **Comparison**: at least 3 alternatives. Criteria must fit the topic: bundle size for a frontend library, latency or guarantees for a protocol, and so on.
 
-## Differences from Full Mode
+## Not in This Mode
 
-| Aspect | Overview | Full |
-|--------|----------|------|
-| Code examples | None | 3+ with runnable code |
-| Cheat sheet | None | API ref + patterns card |
-| Bonus section | None | Niche use cases |
-| Decision matrix | Explicit use/not-use | Implied in comparison |
-| Length | Short (~100 lines) | Long (~250 lines) |
-
-## Output Language
-
-- Output in Vietnamese per CLAUDE.md rules
-- Technical terms keep English with Vietnamese annotation format
+- No code, install command, or API → `usage` / `cheatsheet`
+- No architecture or internal mechanics → `internals`

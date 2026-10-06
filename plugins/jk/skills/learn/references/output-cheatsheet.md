@@ -1,6 +1,6 @@
 # Output Template: Cheatsheet Mode
 
-Use this template when `mode: cheatsheet`. Focused, scannable, API-first.
+Use this template when `mode: cheatsheet`. Answers one question: **"Where is that API / option again?"** A lookup reference for someone already using the topic: scannable, API-first, no prose.
 
 ## Template Structure
 
@@ -72,9 +72,10 @@ Use this template when `mode: cheatsheet`. Focused, scannable, API-first.
 3. **No prose**: Tables, code blocks, bullet points only. No paragraphs.
 4. **Visual hierarchy**: Use headers and separators to create clear sections
 5. **Concise**: Every word must earn its place
+6. **Visuals**: tables only, per `visuals.md`; a decision tree is allowed only when 3+ APIs overlap
 
-## Output Language
+## Not in This Mode
 
-- Output in Vietnamese per CLAUDE.md rules
-- Technical terms keep English with Vietnamese annotation format
-- Keep API signatures in English (code is universal)
+- No tutorials or use-case walkthroughs → `usage`
+- No explanation of why a pitfall happens → `internals` (here a pitfall is one line: problem → fix)
+- No comparison with alternatives → `overview`

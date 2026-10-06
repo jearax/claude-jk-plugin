@@ -2,119 +2,77 @@
 """Classify /learn command input into mode, topic, flags.
 
 Deterministic parser - zero external deps, zero token overhead.
-Output: JSON to stdout with {mode, topic, html, url}.
+Output: JSON to stdout with {mode, topic, html, url, eli}.
 
-Default mode: quick (MD terminal, lightweight).
-Full mode: requires explicit keywords (full, strict, hard, ...).
+Mode: the FIRST word, only when it is exactly a mode name
+(overview, usage, workflow, internals, cheatsheet, docs). No aliases.
+Otherwise overview.
+ELI: --eli<N> flag (--eli5, --eli10, ...), N = reader level. A modifier on any
+mode; with no mode word it selects the dedicated eli template.
+Flags (--eli<N>, --md, --html) may appear anywhere.
 """
 import sys
 import re
 import json
 
-INTENT_MAP = {
-    # Full/comprehensive keywords → full mode + HTML
-    "comprehensive": "full",
-    "thorough": "full",
-    "strict": "full",
-    "full": "full",
-    "hard": "full",
-    # Vietnamese: full
-    "đầy đủ": "full",
-    "toàn bộ": "full",
-    "kỹ lưỡng": "full",
-    # Detail keywords → detail mode + HTML
-    "deep dive": "detail",
-    "detail": "detail",
-    "deep": "detail",
-    # Vietnamese: detail
-    "chi tiết": "detail",
-    "sâu": "detail",
-    "kỹ": "detail",
-    # Overview → overview mode (MD terminal)
-    "overview": "overview",
-    # Vietnamese: overview
-    "tổng quan": "overview",
-    # Cheatsheet → cheatsheet mode + HTML
-    "cheatsheet": "cheatsheet",
-    "cheat": "cheatsheet",
-    # Vietnamese: cheatsheet
-    "tóm tắt": "cheatsheet",
-    # Natural language → quick mode
-    "tell me about": "quick",
-    "tell me": "quick",
-    "about": "quick",
-}
+MODES = {"overview", "usage", "workflow", "internals", "cheatsheet", "docs"}
+DEFAULT_MODE = "overview"
 
-# Keywords that force quick mode (MD terminal, lightweight)
-# Includes Vietnamese: nhanh, gọn, ngắn
-QUICK_KEYWORDS = {"fast", "quick", "brief", "simple", "short", "nhanh", "gọn", "ngắn"}
-
-# Modes that default to HTML output
-HTML_MODES = {"full", "detail", "cheatsheet"}
+# Modes that default to HTML output (long or table-heavy content)
+HTML_MODES = {"usage", "workflow", "internals", "cheatsheet"}
 
 URL_PATTERN = re.compile(r'https?://[^\s]+')
+ELI_PATTERN = re.compile(r'(?<!\S)--eli([1-9]\d?)(?!\S)')
+NONE_RESULT = {"mode": "none", "topic": "", "html": False, "url": None, "eli": None}
+
+
+def _squeeze(text: str) -> str:
+    return re.sub(r'\s+', ' ', text).strip()
+
+
+def _pop_flag(text: str, flag: str) -> tuple:
+    """Remove a standalone flag from text. Returns (found, remaining_text)."""
+    pattern = re.compile(r'(?<!\S)' + re.escape(flag) + r'(?!\S)')
+    return bool(pattern.search(text)), _squeeze(pattern.sub(' ', text))
 
 
 def classify(raw_input: str) -> dict:
     """Parse raw input string into structured classification."""
-    text = raw_input.strip()
-    if not text:
-        return {"mode": "none", "topic": "", "html": False, "url": None}
+    text = _squeeze(raw_input)
 
-    # Detect --md flag → force MD output
-    md_flag = bool(re.search(r'\B--md\b', text))
-    text = re.sub(r'\s*\B--md\b\s*', ' ', text).strip()
+    eli_match = ELI_PATTERN.search(text)
+    eli = int(eli_match.group(1)) if eli_match else None
+    text = _squeeze(ELI_PATTERN.sub(' ', text))
+    md_flag, text = _pop_flag(text, "--md")
+    html_flag, text = _pop_flag(text, "--html")
 
-    # Detect --html flag → force HTML output
-    html_flag = bool(re.search(r'\B--html\b', text))
-    text = re.sub(r'\s*\B--html\b\s*', ' ', text).strip()
-
-    # Detect URL (strip trailing punctuation)
+    # URL (strip trailing punctuation); remaining text stays as context
+    url = None
     url_match = URL_PATTERN.search(text)
     if url_match:
         url = url_match.group(0).rstrip('.,;:!?)')
-        text = re.sub(r'\s+', ' ', text.replace(url_match.group(0), " ")).strip()
-        mode = _resolve_mode(text)
-        html = _resolve_html(mode, text, md_flag, html_flag)
-        return {"mode": mode, "topic": text or url, "html": html, "url": url}
+        text = _squeeze(text.replace(url_match.group(0), " "))
 
-    # Detect intent keywords (word boundaries, longest match first)
-    for keyword, mode in sorted(INTENT_MAP.items(), key=lambda x: -len(x[0])):
-        pattern = re.compile(r'\b' + re.escape(keyword) + r'\b', re.IGNORECASE)
-        if pattern.search(text):
-            topic = re.sub(r'\s+', ' ', pattern.sub("", text, count=1)).strip()
-            if not topic:
-                return {"mode": "none", "topic": "", "html": False, "url": None}
-            html = _resolve_html(mode, topic, md_flag, html_flag)
-            return {"mode": mode, "topic": topic, "html": html, "url": None}
+    # Mode word must come first, so topics like "memory usage" stay intact
+    mode = None
+    first, _, rest = text.partition(" ")
+    if first.lower() in MODES:
+        mode = first.lower()
+        text = rest.strip()
 
-    # Default: bare topic → quick mode, MD terminal
-    html = _resolve_html("quick", text, md_flag, html_flag)
-    return {"mode": "quick", "topic": text, "html": html, "url": None}
+    topic = text or url
+    if not topic:
+        return dict(NONE_RESULT)
+    if mode is None:
+        mode = "eli" if eli else DEFAULT_MODE
 
-
-def _resolve_mode(text: str) -> str:
-    """Resolve mode from text. Checks INTENT_MAP first, then QUICK_KEYWORDS, else full."""
-    # Check INTENT_MAP keywords (longest match first) — preserves detail/overview/cheatsheet intent
-    for keyword, mode in sorted(INTENT_MAP.items(), key=lambda x: -len(x[0])):
-        pattern = re.compile(r'\b' + re.escape(keyword) + r'\b', re.IGNORECASE)
-        if pattern.search(text):
-            return mode
-    # Fallback: quick keywords → quick, else full
-    words = set(text.lower().split())
-    if words & QUICK_KEYWORDS:
-        return "quick"
-    return "full"
-
-
-def _resolve_html(mode: str, text: str, md_flag: bool, html_flag: bool) -> bool:
-    """Determine output format. Explicit flags override mode defaults."""
     if html_flag:
-        return True
-    if md_flag:
-        return False
-    # Mode-based default: full/detail/cheatsheet → HTML, quick/overview → MD
-    return mode in HTML_MODES
+        html = True
+    elif md_flag:
+        html = False
+    else:
+        html = mode in HTML_MODES
+    return {"mode": mode, "topic": topic, "html": html, "url": url, "eli": eli}
 
 
 if __name__ == "__main__":

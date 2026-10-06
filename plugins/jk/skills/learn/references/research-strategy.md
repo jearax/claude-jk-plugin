@@ -1,72 +1,71 @@
 # Research Strategy Reference
 
-Defines research orchestration for each mode. Execute in order: Phase A → B → C.
+Defines research per mode. Execute in order: Phase A → B → C. Each mode researches only what its own template needs.
 
-## Phase A: Official Docs (all modes)
+## Phase A: Official Sources (all modes)
 
-1. Fetch official documentation for the topic:
-   - **Preferred:** invoke docs-seeker skill (`/ak:docs-seeker`) with `"{topic}"` if registered → extracts API reference, guides, quickstart.
-   - **Fallback:** `WebSearch("{topic} official documentation")` → `WebFetch(<official-doc-url>)` on the canonical docs site. Extract API reference, guides, quickstart manually.
+1. Fetch the official documentation for the topic:
+   - **Preferred:** the `/ak:docs-seeker` skill with `"{topic}"`, if registered.
+   - **Fallback:** `WebSearch("{topic} official documentation")` → `WebFetch(<official-doc-url>)` on the canonical docs site.
    - (See SKILL.md "Dependencies & Fallback" for the detection rule.)
-2. If URL was provided (from input routing):
-   - Already fetched via `mcp__web_reader__webReader` (fallback: `WebFetch`) in input routing step
-   - Use this as primary source, supplement with the Phase A docs fetch above
+   - **Concept topics** (protocols, runtime behavior, patterns such as TCP, DNS, event loop) often have no docs site. Use the authoritative spec or reference instead: RFC, W3C/WHATWG spec, MDN, or the runtime's official page for that concept.
+2. If a URL was provided, it was already fetched during routing. Use it as the primary source and supplement it with Phase A.
 
-## Phase B: Web Research (parallel WebSearch calls)
+Pick the docs pages that match the mode: introduction/concepts for `overview`, guides and examples for `usage`, tutorials or end-to-end guides for `workflow`, architecture or design docs for `internals`, API reference for `cheatsheet`, and the docs index (navigation, sitemap, `llms.txt`, changelog) for `docs`.
 
-Run searches in **parallel** using multiple `WebSearch` tool calls simultaneously.
+## Phase B: Web Research
 
-### Source Priority (IMPORTANT)
+Run the mode's searches in **parallel** with multiple `WebSearch` calls.
 
-When evaluating search results, prioritize in this order:
-1. **Official documentation** — official docs sites, GitHub README, official guides
-2. **Official repositories** — GitHub/GitLab repos by the original authors
-3. **Well-known blogs** — authors recognized in that ecosystem (e.g. Kent C. Dodds for React, Josh W. Comeau for CSS, etc.)
-4. **Strong communities** — Stack Overflow answers with high votes, dev.to, MDN, CSS-Tricks, etc.
-5. **Other sources** — only if higher-priority sources lack the needed info
+### Source Priority
 
-When multiple sources conflict, **official docs always win**.
+1. **Official documentation**: docs sites, official guides
+2. **Official repositories**: GitHub/GitLab repos by the original authors (README, docs, issues, discussions)
+3. **Recognized experts**: authors known in that ecosystem
+4. **Strong communities**: highly voted Stack Overflow answers, MDN
+5. **Other sources**: only when higher-priority sources lack the information
+
+When sources conflict, **official sources always win**.
 
 ### Search Templates
 
-| # | Query Template | Used By Modes |
-|---|---------------|---------------|
-| S1 | `"{topic} most common use cases best practices"` | quick, cheatsheet |
-| S2 | `"{topic} vs alternatives comparison {year}"` | full, overview, detail |
-| S3 | `"{topic} common use cases examples best practices"` | full, detail, cheatsheet |
-| S4 | `"{topic} advanced patterns tricks less known"` | full, detail |
-| S5 | `"{topic} architecture internals source code"` | detail only |
+| # | Query Template | Mode |
+|---|----------------|------|
+| S1 | `"{topic} vs alternatives comparison {year}"` | overview |
+| S2 | `"{topic} common use cases examples best practices"` | usage |
+| S3 | `"{topic} patterns real world project"` | usage |
+| S4 | `"{topic} step by step tutorial end to end"` | workflow |
+| S5 | `"{topic} common errors troubleshooting"` | workflow |
+| S6 | `"{topic} architecture internals how it works"` | internals |
+| S7 | `"{topic} pitfalls gotchas performance"` | internals |
+| S8 | `"{topic} API reference options"` | cheatsheet |
+| S9 | `"{topic} official documentation getting started guide"` | docs |
+| S10 | `"{topic} explained for beginners how it works"` | eli |
 
 ### Mode → Search Mapping
 
 | Mode | Searches | Parallel? |
 |------|----------|-----------|
-| quick | S1 | Single call |
-| full | S2, S3, S4 | Yes (3 parallel) |
-| overview | S2 | Single call |
-| detail | S2, S3, S4, S5 | Yes (4 parallel) |
-| cheatsheet | S1, S3 | Yes (2 parallel) |
+| overview | S1 | Single call |
+| usage | S2, S3 | Yes (2 parallel) |
+| workflow | S4, S5 | Yes (2 parallel) |
+| internals | S6, S7 | Yes (2 parallel) |
+| cheatsheet | S8 | Single call |
+| docs | S9 | Single call |
+| eli | S10 | Single call |
 
-**Year placeholder**: Replace `{year}` with current year.
+`--eli<N>` on another mode adds no searches; it only changes how the content is written.
+
+**Docs note:** every URL in the output must be opened with `WebFetch` first. Drop links that fail; never build a URL from a guessed path.
+
+**Eli note:** S10 results only help pick the analogy and the order of explanation. Every fact shown to the reader (mechanism steps, warnings, definitions) must still match the Phase A official source. Beginner tutorials simplify, and some simplify into errors.
+
+**Year placeholder**: replace `{year}` with the current year.
 
 ## Phase C: Synthesis
 
-1. Combine Phase A (official docs) + Phase B (web search results)
-2. Deduplicate overlapping information
-3. Extract: key concepts, API signatures, code examples, comparison data
-4. Organize by the output template structure (see `output-{mode}.md`)
-5. If information is insufficient for any section:
-   - Run 1 additional targeted search for that specific gap
-   - Max 1 follow-up search to avoid token waste
-
-## Token Budget Guidelines
-
-| Mode | Max Research Tokens | Sources |
-|------|--------------------|---------|
-| quick | Minimal (~1 search) | 1 search + docs fetch |
-| overview | Low (~2 searches) | 1 search + docs fetch |
-| cheatsheet | Low (~2 searches) | 2 searches + docs fetch |
-| full | Medium (~3 searches) | 3 searches + docs fetch |
-| detail | High (~4 searches) | 4 searches + docs fetch |
-
-Keep research focused — prefer depth on target topic over breadth of alternatives.
+1. Combine Phase A (official sources) and Phase B (web results).
+2. Deduplicate overlapping information.
+3. Keep only what the mode's template asks for; drop the rest.
+4. If a template section still lacks information, run 1 more targeted search for that gap. Never more than 1 follow-up search.
+5. If the information still cannot be verified, omit the field or mark it as unverified. Never invent data to fill a table.
