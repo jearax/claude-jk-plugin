@@ -1,7 +1,7 @@
 {
   "skill": "chat2k",
   "version": "1.0.0",
-  "description": "Eval cases for chat2k: trigger accuracy + filtering behavior + output quality (decided-only knowledge, verified URLs, no transcript dump).",
+  "description": "Eval cases for chat2k: trigger accuracy + filtering behavior + focus-topic extraction + output quality (decided-only knowledge, verified URLs, no transcript dump).",
   "cases": [
     {
       "id": "trigger-bilingual-vi",
@@ -9,7 +9,7 @@
       "intent": "Vietnamese trigger — must activate jk:chat2k and produce a Markdown note.",
       "assertions": [
         "Recognizes 'trích xuất kiến thức' / 'tài liệu' as chat2k trigger.",
-        "Asks for --current / --from if neither given (or uses --current by default).",
+        "Uses the running session by default without asking.",
         "Output is Markdown, not raw transcript."
       ]
     },
@@ -25,24 +25,12 @@
     },
     {
       "id": "current-session-default",
-      "prompt": "/jk:chat2k --current",
-      "intent": "Smart-resolve the best session in the project's session dir.",
+      "prompt": "/jk:chat2k (no args, mid-session)",
+      "intent": "Default source is the running session, not the richest past one.",
       "assertions": [
-        "Does NOT just pick the most-recently-modified .jsonl by mtime.",
-        "Ranks by user/assistant message count, drops files below 5 msgs.",
-        "If a clear winner exists (≥ 2× runner-up) → auto-resolves, no menu.",
-        "If ambiguous → returns candidates[] and the agent prompts via AskUserQuestion.",
-        "Writes to default pwd-relative path '{pwd}/chat2k-{date}-{slug}.md' when --out not given."
-      ]
-    },
-    {
-      "id": "auto-resolve-skip-empty-current",
-      "prompt": "/jk:chat2k (no flags) when current session has < 5 msgs and a previous session has 50",
-      "intent": "Brand-new current session should be skipped in favor of the richer recent session.",
-      "assertions": [
-        "Empty / brand-new session is NOT picked (msg_count < 5 threshold).",
-        "The richer previous session is auto-resolved.",
-        "No AskUserQuestion is shown — clear winner."
+        "Resolves the running session (Claude Code: file named after CLAUDE_CODE_SESSION_ID), even if it has fewer messages than older sessions.",
+        "Writes to default pwd-relative path '{pwd}/chat2k-{date}-{slug}.md' when --out not given.",
+        "Past sessions are only read when the user passes --from <path>; there is no ranking/menu."
       ]
     },
     {
@@ -120,13 +108,52 @@
       ]
     },
     {
-      "id": "marks-filter",
-      "prompt": "/jk:chat2k --current --marks \"auth,deployment\"",
-      "intent": "Only auth + deployment topics survive; other topics are dropped.",
+      "id": "focus-query-natural-language",
+      "prompt": "/jk:chat2k extract knowledge of react   (session discussed react, kubernetes, and a postgres index)",
+      "intent": "Free-text focus extracts only one topic from a multi-topic session.",
       "assertions": [
-        "Output contains only topics matching 'auth' or 'deployment' (case-insensitive).",
-        "Other topics from the session are NOT in the output.",
-        "Decisions Summary table only includes surviving topics."
+        "Agent strips filler words and expands 'react' into specific terms (e.g. jsx, hooks, useEffect, rsc) passed via --terms.",
+        "Does NOT pass $ARGUMENTS verbatim as one quoted argv item.",
+        "Output covers only React; no kubernetes or postgres content appears.",
+        "Title, Overview, and filename slug are about React."
+      ]
+    },
+    {
+      "id": "focus-semantic-related-terms",
+      "prompt": "/jk:chat2k react   (the chat discussed useEffect cleanup and RSC boundaries without repeating the word 'React')",
+      "intent": "Related sub-concepts count as the focus topic.",
+      "assertions": [
+        "useEffect cleanup and RSC boundary knowledge is included.",
+        "A message using 'react' in the plain-English sense ('react to the error') is not treated as React knowledge."
+      ]
+    },
+    {
+      "id": "focus-keeps-explanatory-knowledge",
+      "prompt": "/jk:chat2k tổng hợp kiến thức về react hooks   (the chat explained rules of hooks and a stale-closure gotcha; nothing was 'decided')",
+      "intent": "Focus mode keeps reusable explanations, not only decisions.",
+      "assertions": [
+        "Key points include the rules of hooks and the stale-closure gotcha.",
+        "Output is not empty just because no decision marker exists.",
+        "Decisions Summary is omitted when no topic has a Decision line."
+      ]
+    },
+    {
+      "id": "focus-not-found",
+      "prompt": "/jk:chat2k extract knowledge of graphql   (graphql never discussed)",
+      "intent": "Missing topic is reported, not papered over.",
+      "assertions": [
+        "Retries once with broader terms when hit_count == 0.",
+        "No output file is written.",
+        "Tells the user the topic was not found and lists the subjects the session did cover (from outline)."
+      ]
+    },
+    {
+      "id": "focus-in-context-fallback",
+      "prompt": "/jk:chat2k react   when the parser returns an error saying no transcript was found",
+      "intent": "Mid-session extraction still works without a transcript file.",
+      "assertions": [
+        "Uses the conversation already in context as the source.",
+        "Applies the same focus rules and output format."
       ]
     },
     {
@@ -152,7 +179,7 @@
         "No 'Source: <path>' line.",
         "No 'Messages: <count>' line.",
         "No '*Generated by jk:chat2k ...*' footer.",
-        "No 'Re-run with --marks ...' hint at the bottom."
+        "No 'Re-run with ...' hint at the bottom."
       ]
     },
     {
@@ -194,9 +221,8 @@
       "intent": "Output is a focused note, not the full transcript.",
       "assertions": [
         "Output is < 500 lines.",
-        "Output is structured: Overview, Topics, Decisions Summary, References.",
-        "Output does NOT contain verbatim user/assistant conversation turns.",
-        "Decisions Summary table is present."
+        "Output is structured: Overview, Key Takeaways, Topics, then Decisions Summary / References when applicable.",
+        "Output does NOT contain verbatim user/assistant conversation turns."
       ]
     },
     {

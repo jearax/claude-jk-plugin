@@ -11,9 +11,19 @@ This document defines the JSON contract emitted by `scripts/parse-transcript.py`
   "messages": [
     {
       "role": "user" | "assistant",
-      "text": "full message text, tool blocks rendered as [tool_use: name] / [tool_result: ...]",
-      "timestamp": "2026-07-23T09:24:13.123Z" | null
+      "text": "message text only — tool calls/results, system reminders, skill bodies stripped",
+      "timestamp": "2026-07-23T09:24:13.123Z" | null,
+      "index": 12                               // only with --terms: position in the unfiltered session
     }
+  ],
+  "focus": {                                  // only with --terms
+    "terms": ["react", "useEffect"],
+    "context": 2,                             // neighbours kept on each side of a hit
+    "hit_count": 7,                           // messages that matched a term
+    "total_messages": 180                     // session size before filtering
+  },
+  "outline": [                                // only with --terms AND hit_count == 0
+    {"index": 0, "text": "first 160 chars of each user prompt"}
   ],
   "session_meta": {
     "session_id": "uuid" | null,
@@ -24,17 +34,36 @@ This document defines the JSON contract emitted by `scripts/parse-transcript.py`
   "spec": {                                   // resolved CLI flags
     "current": false,
     "from_path": null,
-    "marks": ["topic1"],
+    "query": "extract knowledge of react",     // free text (non-flag tokens), informational
+    "terms": ["react", "useEffect"],
+    "context": 2,
     "out_path": null,
-    "stdin": false
+    "stdin": false,
+    "warnings": ["unknown flag ignored: --marks"]
   },
-  "error": "optional, only if parse failed",
-  "needs_resolution": true,                    // only if no --current / --from given AND ambiguous candidates
-  "candidates": [                              // when needs_resolution=true and multiple sessions are roughly equal
-    {"path": "/abs/.jsonl", "msg_count": 42, "mtime": 1753256700.0}
-  ]
+  "error": "optional, only if parse failed / no transcript found",
 }
 ```
+
+## CLI arguments
+
+| Arg | Meaning |
+|---|---|
+| free tokens | `query` (informational; the agent turns it into `--terms`) |
+| `--terms "a,b"` | Comma-separated terms. Whole-word, case-insensitive match; symbols allowed (`c++`, `next.js`) |
+| `--context N` | Neighbours kept around each hit (default 2) |
+| `--from <path>` / `--stdin` | Explicit transcript source |
+| `--current` | Explicit alias for the default (running session) |
+| `--out <path>` | Echoed in `spec` for the agent |
+
+If the whole argument string arrives as a single argv item (e.g. `script.py "$ARGUMENTS"`), it is re-split with `shlex` (falling back to whitespace on unbalanced quotes). Unknown flags are ignored and reported in `spec.warnings`.
+
+## Source resolution
+
+| Mode | Resolution |
+|---|---|
+| default / `--current` | **Running session.** Claude Code: `~/.claude/projects/*/$CLAUDE_CODE_SESSION_ID.jsonl`. SQLite CLIs: exporter for the active session. Otherwise: newest-mtime transcript for the cwd. Not found → `error` telling the agent to use the in-context conversation |
+| `--from <path>` | That file — the way to read a past session |
 
 ## Per-CLI format quirks
 
@@ -69,16 +98,10 @@ CLI_HANDLERS["my-cli"] = {
 ### Claude Code (JSONL)
 
 - Path: `~/.claude/projects/<project-encoded>/*.jsonl`
-- Project encoding: `/Users/foo/Bar` → `-Users-foo-Bar`
+- Project encoding: every non-alphanumeric char → `-` (`/Users/foo/Bar` → `-Users-foo-Bar`, `/Users/foo/.config` → `-Users-foo--config`). When the shell cwd drifted into a subdirectory, the parser walks up to the nearest existing project dir.
+- Lines with `isMeta: true` (skill bodies, caveats) are skipped.
 - `type` field: `user`, `assistant`, `system`, `ai-title`, `attachment`, `queue-operation`, `permission-mode`, `file-history-snapshot`, `last-prompt`, `mode`
 - `message.content` is **either** a string OR an array of content blocks (`text`, `tool_use`, `tool_result`).
-- `--current` (and bare `/jk:chat2k`) triggers **smart auto-resolve** via `find_best_session()`:
-  - Lists all `.jsonl` in the project session dir.
-  - Quick-counts user/assistant messages per file.
-  - Drops files below `min_messages=5` (treats brand-new empty sessions as "not yet started").
-  - Ranks by `(msg_count desc, mtime desc)`.
-  - If top has ≥ 2× the runner-up's count → auto-resolve (no prompt).
-  - Otherwise → returns `candidates[]` for the agent to present a menu.
 
 ### Codex (JSONL — event_msg envelope)
 
@@ -117,13 +140,14 @@ CLI_HANDLERS["my-cli"] = {
 |---|---|
 | Empty `message.content` | No info to extract |
 | `type` ∈ noise set (`system`, `ai-title`, `attachment`, etc.) | Not conversation |
-| Tool-result-only blocks with no surrounding text | Tool chatter, not knowledge |
+| `tool_use` / `tool_result` / `thinking` blocks | Execution traces, not knowledge; a turn with only these is dropped |
+| `isMeta: true` lines | Harness-injected skill bodies and caveats |
+| `<system-reminder>…</system-reminder>` | Hook/runtime context injected into user turns |
 | `permission-mode`, `mode`, `queue-operation` | Runtime metadata |
-| `[tool_use: bash]` / `[tool_result: ...]` placeholders kept but flagged | Visible in markdown so the LLM can ignore them when extracting topics |
 
 ## What gets normalized
 
-- All whitespace runs → single space within a line.
 - Surrounding blank lines stripped.
-- Content blocks (text + tool) joined with `\n` so a single message keeps its structure for downstream LLM analysis.
+- Text blocks joined with `\n` so a single message keeps its structure for downstream LLM analysis.
+- Slash-command envelopes (`<command-name>/x</command-name><command-args>y</command-args>`) collapse to `/x y`.
 - Timestamps kept as ISO8601 strings (no timezone coercion) — Claude Code uses UTC ISO with `Z`.

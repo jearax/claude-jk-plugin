@@ -19,8 +19,8 @@ import re
 import json
 import os
 import time
+import shlex
 import sqlite3
-import subprocess
 import tempfile
 from pathlib import Path
 
@@ -35,6 +35,27 @@ NOISE_TYPES = {
     "attachment",
     "system",
 }
+
+SYSTEM_REMINDER_RE = re.compile(r"<system-reminder>.*?</system-reminder>", re.DOTALL)
+COMMAND_NAME_RE = re.compile(r"<command-name>(.*?)</command-name>", re.DOTALL)
+COMMAND_ARGS_RE = re.compile(r"<command-args>(.*?)</command-args>", re.DOTALL)
+COMMAND_TAGS_RE = re.compile(r"<command-(?:message|name|args)>.*?</command-(?:message|name|args)>", re.DOTALL)
+
+
+def _clean_text(text: str) -> str:
+    """Strip harness-injected noise from a message body.
+
+    - `<system-reminder>` blocks are runtime context, not conversation.
+    - Slash-command envelopes collapse to `/name args` so the invocation stays readable.
+    """
+    text = SYSTEM_REMINDER_RE.sub("", text)
+    name = COMMAND_NAME_RE.search(text)
+    if name:
+        args = COMMAND_ARGS_RE.search(text)
+        invocation = f"{name.group(1).strip()} {args.group(1).strip() if args else ''}".strip()
+        text = COMMAND_TAGS_RE.sub("", text).strip()
+        text = f"{invocation}\n{text}".strip()
+    return text.strip()
 
 
 def parse_jsonl(path: str) -> dict:
@@ -70,6 +91,10 @@ def parse_jsonl(path: str) -> dict:
                 continue
 
             # Skip noise types — broader set than Claude Code's
+            # Harness-injected meta turns (skill bodies, caveats) are not conversation
+            if obj.get("isMeta"):
+                continue
+
             if obj_type in NOISE_TYPES:
                 # Capture session id from any payload that has it
                 sid = obj.get("sessionId") or payload.get("session_id")
@@ -94,14 +119,17 @@ def parse_jsonl(path: str) -> dict:
                 else:
                     text = payload.get("message", "")
 
-            if not role or not text or not str(text).strip():
+            if not role or not text:
+                continue
+            text = _clean_text(str(text))
+            if not text:
                 continue
 
             timestamp = obj.get("timestamp") or obj.get("createdAt")
             messages.append(
                 {
                     "role": role,
-                    "text": str(text).strip(),
+                    "text": text,
                     "timestamp": timestamp,
                 }
             )
@@ -128,27 +156,19 @@ def parse_jsonl(path: str) -> dict:
 def _extract_text(content) -> str:
     """Extract plain text from a message content field.
 
-    Handles both string content and array-of-blocks content (text/tool_use/tool_result).
+    Handles both string content and array-of-blocks content. Only `text` blocks
+    are kept: tool_use / tool_result / thinking blocks are execution traces, not
+    knowledge, so a tool-only turn yields "" and is dropped by the caller.
     """
     if isinstance(content, str):
         return content
     if isinstance(content, list):
-        parts = []
-        for block in content:
-            if isinstance(block, dict):
-                if block.get("type") == "text":
-                    parts.append(block.get("text", ""))
-                elif block.get("type") == "tool_use":
-                    name = block.get("name", "tool")
-                    parts.append(f"[tool_use: {name}]")
-                elif block.get("type") == "tool_result":
-                    rc = block.get("content", "")
-                    if isinstance(rc, list):
-                        rc = " ".join(
-                            b.get("text", "") for b in rc if isinstance(b, dict)
-                        )
-                    parts.append(f"[tool_result: {str(rc)[:200]}]")
-        return "\n".join(parts)
+        parts = [
+            block.get("text", "")
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "text"
+        ]
+        return "\n".join(p for p in parts if p)
     return str(content)
 
 
@@ -244,30 +264,35 @@ def detect_and_parse(path: str) -> dict:
     return parse_markdown(path)
 
 
-def _quick_count(path: Path) -> int:
-    """Count user/assistant messages in a jsonl without full parsing.
-
-    Cheap heuristic to rank candidates by content richness.
-    Matches both `"type":"user"` and `"type": "user"` (with space).
-    """
-    try:
-        count = 0
-        with open(path, "r", encoding="utf-8") as f:
-            for line in f:
-                # Cheap string check — no JSON parse needed
-                if '"type": "user"' in line or '"type": "assistant"' in line:
-                    count += 1
-        return count
-    except OSError:
-        return 0
-
-
 def _claude_session_dir(cwd: str) -> Path:
-    """Claude Code: ~/.claude/projects/<encoded-cwd>/"""
-    project_dir = cwd.replace("/", "-")
-    if not project_dir.startswith("-"):
-        project_dir = "-" + project_dir
-    return Path.home() / ".claude" / "projects" / project_dir
+    """Claude Code: ~/.claude/projects/<encoded-cwd>/
+
+    Claude Code encodes every non-alphanumeric char as `-`
+    (`/Users/me/.config` → `-Users-me--config`).
+    """
+    return Path.home() / ".claude" / "projects" / re.sub(r"[^A-Za-z0-9]", "-", cwd)
+
+
+def _claude_project_dir_for(cwd: str) -> Path:
+    """Nearest existing Claude Code project dir for `cwd` or one of its parents.
+
+    The shell cwd can drift into a subdirectory of the directory the session was
+    started in; the transcript stays under the session's original cwd.
+    """
+    for candidate in [Path(cwd), *Path(cwd).parents]:
+        d = _claude_session_dir(str(candidate))
+        if d.is_dir():
+            return d
+    return _claude_session_dir(cwd)
+
+
+def _claude_current_session_file() -> Path:
+    """Transcript of the running Claude Code session, via CLAUDE_CODE_SESSION_ID."""
+    session_id = os.environ.get("CLAUDE_CODE_SESSION_ID")
+    if not session_id:
+        return None
+    matches = list((Path.home() / ".claude" / "projects").glob(f"*/{session_id}.jsonl"))
+    return max(matches, key=lambda p: p.stat().st_mtime) if matches else None
 
 
 def _codex_session_root() -> Path:
@@ -364,7 +389,7 @@ def _list_session_files(cli: str, cwd: str) -> list:
     each file's `cwd` field and keep only those matching the current cwd.
     """
     if cli == "claude-code":
-        d = _claude_session_dir(cwd)
+        d = _claude_project_dir_for(cwd)
         return list(d.glob("*.jsonl")) if d.is_dir() else []
 
     if cli == "codex":
@@ -531,77 +556,6 @@ def _list_generic_sessions(cwd: str) -> list:
     return found
 
 
-def find_best_session(
-    min_messages: int = 5, top_n: int = 3, session_dir: Path = None, cli: str = None
-) -> dict:
-    """Pick the best session transcript to extract from across all CLIs.
-
-    Returns {"path": str, "candidates": [(path, msg_count, mtime), ...], "cli": str}.
-
-    Strategy:
-      1. Detect the running CLI (env vars → fallback to dir scan).
-      2. Look up the CLI's handler in `CLI_HANDLERS`.
-      3. If the handler is SQLite-based → auto-export current session to a
-         temp JSONL file, then use that.
-      4. If the handler is JSONL-native → list existing files.
-      5. If the CLI is unknown → fall back to generic scan of common dirs.
-      6. Quick-count user/assistant messages per file.
-      7. Drop files below `min_messages` (treat as empty / noise).
-      8. Rank by (msg_count desc, mtime desc).
-      9. If the top candidate has ≥ 2× the count of the runner-up → auto-resolve.
-         Otherwise → return the top `top_n` so the caller can present a menu.
-
-    The "current session" (currently being written) may show up as the
-    most-recently-modified file but with very few messages — we skip
-    those by the `min_messages` threshold.
-
-    Args:
-      session_dir: override for tests. Defaults to scanning the active CLI's
-        session storage for the current cwd.
-      cli: override for tests. Defaults to auto-detect.
-    """
-    cwd = os.getcwd()
-    if cli is None:
-        cli = detect_cli()
-
-    # Single-dir override (legacy test mode)
-    if session_dir is not None:
-        files = list(session_dir.glob("*.jsonl")) if session_dir.is_dir() else []
-        return _score_candidates(files, min_messages, top_n) | {"cli": cli}
-
-    # Look up handler for this CLI
-    handler = CLI_HANDLERS.get(cli, CLI_HANDLERS["unknown"])
-    handler_type = handler["type"]
-
-    # SQLite-based CLIs: auto-export current session to temp JSONL.
-    if handler_type == "sqlite":
-        exporter = handler["export"]
-        exported = exporter(cwd)
-        if exported:
-            return {
-                "path": exported,
-                "candidates": [(Path(exported), 0, 0)],
-                "cli": cli,
-            }
-        return {"path": "", "candidates": [], "cli": cli}
-
-    # JSONL-native CLIs: list existing files
-    if handler_type == "jsonl":
-        files = handler["list_files"](cwd)
-        if not files:
-            return {"path": "", "candidates": [], "cli": cli}
-        return _score_candidates(files, min_messages, top_n) | {"cli": cli}
-
-    # Generic fallback: scan ALL known JSONL dirs + SQLite caches
-    if handler_type == "generic":
-        files = handler["list_files"](cwd)
-        if not files:
-            return {"path": "", "candidates": [], "cli": cli}
-        return _score_candidates(files, min_messages, top_n) | {"cli": cli}
-
-    return {"path": "", "candidates": [], "cli": cli}
-
-
 def _opencode_export_current(cwd: str) -> str:
     """Detect the active OpenCode session for `cwd` and export to a temp JSONL.
 
@@ -738,132 +692,142 @@ def _epoch_ms_to_iso(ms) -> str:
         return ""
 
 
-def _score_candidates(files: list, min_messages: int, top_n: int) -> dict:
-    """Score a list of session files; return clear winner or shortlist."""
-    if not files:
-        return {"path": "", "candidates": []}
+def find_current_session(cli: str = None) -> str:
+    """Path of the session currently running, or "" if it cannot be located.
 
-    scored = []
-    for p in files:
-        msg_count = _quick_count(p)
+    A user extracting knowledge mid-session wants *this* session, however short.
+      - Claude Code: exact match on CLAUDE_CODE_SESSION_ID.
+      - SQLite CLIs: exporter already targets the active session.
+      - Otherwise: the most recently modified transcript for the cwd (the
+        running session writes on every turn).
+    """
+    cli = cli or detect_cli()
+    if cli == "claude-code":
+        exact = _claude_current_session_file()
+        if exact:
+            return str(exact)
+
+    handler = CLI_HANDLERS.get(cli, CLI_HANDLERS["unknown"])
+    if handler["type"] == "sqlite":
+        return handler["export"](os.getcwd())
+
+    files = []
+    for p in handler["list_files"](os.getcwd()):
         try:
-            mtime = p.stat().st_mtime
+            files.append((p.stat().st_mtime, p))
         except OSError:
             continue
-        scored.append((p, msg_count, mtime))
-
-    # Filter out near-empty sessions
-    rich = [s for s in scored if s[1] >= min_messages]
-    if not rich:
-        # Fall back to most-recently-modified, even if short
-        scored.sort(key=lambda x: x[2], reverse=True)
-        return {"path": str(scored[0][0]), "candidates": scored[:top_n]}
-
-    # Rank by (msg_count desc, mtime desc)
-    rich.sort(key=lambda x: (x[1], x[2]), reverse=True)
-    top, runner = rich[0], rich[1] if len(rich) > 1 else None
-
-    # If runner-up is close in count, surface as menu
-    if runner and top[1] < runner[1] * 2:
-        return {"path": "", "candidates": rich[:top_n]}
-
-    # Clear winner — auto-resolve
-    return {"path": str(top[0]), "candidates": rich[:top_n]}
+    return str(max(files)[1]) if files else ""
 
 
-def find_current_session() -> str:
-    """Backward-compat wrapper: best session path, or empty string."""
-    return find_best_session()["path"]
+def _term_pattern(term: str):
+    """Whole-word, case-insensitive matcher that tolerates symbols (c++, next.js)."""
+    return re.compile(r"(?<!\w)" + re.escape(term) + r"(?!\w)", re.IGNORECASE)
+
+
+def filter_by_terms(messages: list, terms: list, context: int = 2) -> dict:
+    """Keep messages mentioning any term, plus `context` neighbours on each side.
+
+    Neighbours keep the question that led to an answer (and the follow-up that
+    accepted it) even when they do not repeat the keyword. Each kept message
+    carries its original `index` so the agent can reason about adjacency.
+    When nothing matches, return an `outline` of user prompts so the agent can
+    show the user which topics the session actually covers.
+    """
+    patterns = [_term_pattern(t) for t in terms]
+    hits = [
+        i for i, m in enumerate(messages)
+        if any(p.search(m["text"]) for p in patterns)
+    ]
+    keep = sorted({
+        j
+        for i in hits
+        for j in range(max(0, i - context), min(len(messages), i + context + 1))
+    })
+    result = {
+        "messages": [dict(messages[j], index=j) for j in keep],
+        "focus": {
+            "terms": terms,
+            "context": context,
+            "hit_count": len(hits),
+            "total_messages": len(messages),
+        },
+    }
+    if not hits:
+        result["outline"] = [
+            {"index": i, "text": m["text"][:160]}
+            for i, m in enumerate(messages)
+            if m["role"] == "user"
+        ]
+    return result
+
+
+def _split_single_arg(raw_args: list) -> list:
+    """Re-split a whole argument string passed as one argv item.
+
+    `parse-transcript.py "$ARGUMENTS"` collapses every flag into a single
+    token; recover the intended argv. Unbalanced quotes (e.g. "what's") fall
+    back to whitespace splitting.
+    """
+    if len(raw_args) != 1 or not any(ch.isspace() for ch in raw_args[0]):
+        return raw_args
+    try:
+        return shlex.split(raw_args[0])
+    except ValueError:
+        return raw_args[0].split()
 
 
 def resolve_args(raw_args: list) -> dict:
-    """Resolve CLI flags into a parse spec."""
+    """Resolve CLI flags into a parse spec.
+
+    Any token that is not a flag is part of the free-text focus `query`
+    (e.g. `extract knowledge of react`). `--terms` carries the agent-expanded
+    keyword list used for deterministic pre-filtering.
+    """
+    raw_args = _split_single_arg(raw_args)
     spec = {
         "current": False,
         "from_path": None,
-        "marks": [],
+        "query": "",
+        "terms": [],
+        "context": 2,
         "out_path": None,
         "stdin": False,
+        "warnings": [],
     }
+    value_flags = {"--from", "--terms", "--context", "--out"}
+    query_tokens = []
     i = 0
     while i < len(raw_args):
         a = raw_args[i]
-        if a == "--current":
+        if a in value_flags:
+            i += 1
+            value = raw_args[i] if i < len(raw_args) else None
+            if a == "--from":
+                spec["from_path"] = value
+            elif a == "--out":
+                spec["out_path"] = value
+            elif a == "--terms":
+                spec["terms"] = [t.strip() for t in (value or "").split(",") if t.strip()]
+            elif a == "--context":
+                try:
+                    spec["context"] = max(0, int(value))
+                except (TypeError, ValueError):
+                    spec["warnings"].append(f"invalid --context value: {value!r}")
+        elif a == "--current":
             spec["current"] = True
-        elif a == "--from":
-            i += 1
-            spec["from_path"] = raw_args[i] if i < len(raw_args) else None
-        elif a == "--marks":
-            i += 1
-            marks = raw_args[i] if i < len(raw_args) else ""
-            spec["marks"] = [m.strip() for m in marks.split(",") if m.strip()]
-        elif a == "--out":
-            i += 1
-            spec["out_path"] = raw_args[i] if i < len(raw_args) else None
         elif a == "--stdin":
             spec["stdin"] = True
+        elif a.startswith("--"):
+            spec["warnings"].append(f"unknown flag ignored: {a}")
+        else:
+            query_tokens.append(a)
         i += 1
+    spec["query"] = " ".join(query_tokens)
     return spec
 
 
-def emit(spec: dict) -> dict:
-    """Resolve spec to a parsed transcript dict."""
-    if spec["stdin"]:
-        # Read all stdin into a temp file, treat as markdown
-        raw = sys.stdin.read()
-        tmp = "/tmp/chat2k-stdin.md"
-        Path(tmp).write_text(raw, encoding="utf-8")
-        return parse_markdown(tmp)
-
-    if spec["from_path"]:
-        return detect_and_parse(spec["from_path"])
-
-    if spec["current"]:
-        path = find_current_session()
-        if not path:
-            return {
-                "source": "current",
-                "format": "unknown",
-                "messages": [],
-                "session_meta": {
-                    "session_id": None,
-                    "started_at": None,
-                    "last_at": None,
-                    "msg_count": 0,
-                },
-                "error": "no current session found",
-            }
-        return parse_jsonl(path)
-
-    # No flags — auto-resolve via find_best_session().
-    # Returns either a clear winner or a list of candidates for the agent to ask.
-    best = find_best_session()
-    if best["path"]:
-        return parse_jsonl(best["path"])
-    if best["candidates"]:
-        # Ambiguous — ask the user
-        return {
-            "source": None,
-            "format": None,
-            "messages": [],
-            "session_meta": {
-                "session_id": None,
-                "started_at": None,
-                "last_at": None,
-                "msg_count": 0,
-            },
-            "needs_resolution": True,
-            "candidates": [
-                {
-                    "path": str(c[0]),
-                    "msg_count": c[1],
-                    "mtime": c[2],
-                }
-                for c in best["candidates"]
-            ],
-        }
-
-    # Truly nothing — empty resolution
+def _empty_result(**extra) -> dict:
     return {
         "source": None,
         "format": None,
@@ -874,8 +838,41 @@ def emit(spec: dict) -> dict:
             "last_at": None,
             "msg_count": 0,
         },
-        "needs_resolution": True,
+        **extra,
     }
+
+
+def emit(spec: dict) -> dict:
+    """Resolve spec to a parsed transcript dict, focus-filtered when terms are given."""
+    result = _load(spec)
+    if spec.get("terms") and result.get("messages"):
+        result.update(filter_by_terms(result["messages"], spec["terms"], spec["context"]))
+    return result
+
+
+def _load(spec: dict) -> dict:
+    """Resolve the transcript source.
+
+    Precedence: --stdin, --from, else the currently running session
+    (default; --current is an explicit alias). Past sessions are read via --from.
+    """
+    if spec["stdin"]:
+        # Read all stdin into a temp file, treat as markdown
+        raw = sys.stdin.read()
+        tmp = "/tmp/chat2k-stdin.md"
+        Path(tmp).write_text(raw, encoding="utf-8")
+        return parse_markdown(tmp)
+
+    if spec["from_path"]:
+        return detect_and_parse(spec["from_path"])
+
+    path = find_current_session()
+    if not path:
+        return _empty_result(
+            source="current",
+            error="no current session transcript found; fall back to the in-context conversation",
+        )
+    return parse_jsonl(path)
 
 
 if __name__ == "__main__":

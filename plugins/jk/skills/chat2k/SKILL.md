@@ -1,16 +1,16 @@
 ---
 name: jk:chat2k
-description: "Extract reusable knowledge from chat sessions in any CLI (claude, opencode, codex, cursor) and save as a beautiful Markdown notes file. Use when user says 'chat to knowledge', 'chat2k', 'extract knowledge from this chat', 'save this chat as notes', 'tóm tắt cuộc trò chuyện thành tài liệu', 'lưu cuộc chat thành kiến thức', or wants to turn a brainstorming/discussion session into durable reference material. Filters noise — only captures *decided* knowledge (topics compared, pros/cons, use cases, decisions, sources). Does NOT dump full transcripts. Output uses clean markdown links — no [verified] markers, no [src: ...] citations, no provenance footer."
-argument-hint: "[--current] [--from <path>] [--marks \"t1,t2\"] [--out <path>]"
+description: "Extract reusable knowledge from chat sessions in any CLI (claude, opencode, codex, cursor) and save as a beautiful Markdown notes file. Use when user says 'chat to knowledge', 'chat2k', 'extract knowledge from this chat', 'save this chat as notes', 'tóm tắt cuộc trò chuyện thành tài liệu', 'lưu cuộc chat thành kiến thức', or wants to turn a brainstorming/discussion session into durable reference material. Accepts a free-text focus to extract ONE topic from a long multi-topic session, mid-session included (e.g. '/jk:chat2k extract knowledge of react', '/jk:chat2k tổng hợp phần thảo luận về auth'). Filters noise — only captures *decided* knowledge (topics compared, pros/cons, use cases, decisions, sources). Does NOT dump full transcripts. Output uses clean markdown links — no [verified] markers, no [src: ...] citations, no provenance footer."
+argument-hint: "[focus topic in free text] [--from <path>] [--out <path>]"
 license: MIT
 metadata:
   author: jjuidev
-  version: "1.1.0"
+  version: "1.0.0"
 ---
 
 # /jk:chat2k — Chat to Knowledge
 
-Turn a chat session into a focused, beautiful Markdown knowledge note. **Filter, not dump**: only the *decided* knowledge survives — topics discussed, comparisons, pros/cons, use cases, decisions, and verified references. Chat noise (greetings, retries, half-sentences) is dropped.
+Turn a chat session — or just one topic inside it — into a focused, beautiful Markdown knowledge note. **Filter, not dump**: only reusable knowledge survives — topics discussed, comparisons, pros/cons, use cases, decisions, and verified references. Chat noise (greetings, retries, half-sentences) is dropped.
 
 ## ⛔ HARD CONTRACT — read first, obey strictly
 
@@ -68,7 +68,8 @@ grep -E 'Source: ' output.md
 grep -E 'Messages: ' output.md
 grep -E '^## Notes' output.md
 grep -E '^\*\*Sources\*\*: \[.*\]\(.*\), \[.*\]' output.md   # single-line Sources
-grep -E 'https?://[^\s)]+(?!\))' output.md   # bare URLs
+# Bare URLs: drop every [title](url) link, then look for any URL left over
+sed -E 's/\]\(https?:\/\/[^)]*\)//g' output.md | grep -nE 'https?://'
 ```
 
 ---
@@ -77,104 +78,94 @@ grep -E 'https?://[^\s)]+(?!\))' output.md   # bare URLs
 
 | Trigger | Action |
 |---|---|
-| `/jk:chat2k` | **Auto-resolve** the best session in the current project's session dir (see "Source resolution" below). Only ask if multiple candidates are ambiguous. |
-| `/jk:chat2k --current` | Same as above — explicit alias. |
-| `/jk:chat2k --from <path>` | Parse a transcript file (JSONL or markdown). |
-| `/jk:chat2k --marks "topic1,topic2"` | Focus only on the listed topics. |
-| `/jk:chat2k --out <path>` | Override output path (absolute or pwd-relative). |
+| `/jk:chat2k` | Whole **current** session → decided-knowledge note. |
+| `/jk:chat2k <focus text>` | **Only that topic** from the current session, e.g. `extract knowledge of react`, `tổng hợp phần về auth flow`. Works mid-session. |
+| `/jk:chat2k <focus text> --from <path>` | Same, from a transcript file (JSONL or markdown). |
+| `--out <path>` | Override output path (absolute or pwd-relative). Combines with any of the above. |
 
 ## Scope
 
 **Handles:**
-- Session transcripts from **any CLI**: Claude Code, OpenCode, Codex, Cursor Chat. Auto-detects format.
-- JSONL (Claude Code format) and plain markdown chat dumps.
-- Brainstorming, tech review, decision-making, framework-comparison sessions.
+- The **running session** (default) and past/exported transcripts from **any CLI**: Claude Code, OpenCode, Codex, Cursor Chat. Auto-detects format.
+- Long sessions that mixed many subjects, when the user wants **one** of them.
+- Brainstorming, tech review, learning, decision-making, framework-comparison sessions.
 
 **Does NOT handle:**
-- Generic summary of a non-knowledge conversation (chit-chat, pure Q&A).
-- Real-time capture mid-session (this skill reads a finished/past session).
+- Generic summary of a non-knowledge conversation (chit-chat).
 - Translating the chat — see `jk:translate`.
 - Whole repo / codebase documentation — see `jk:learn`.
 
 ## Inputs
 
-| Flag | Default | Meaning |
+| Input | Default | Meaning |
 |---|---|---|
-| `--current` | off | Use current session transcript |
+| free text (any non-flag words) | empty | **Focus query.** Natural language, any language. Empty = whole session. |
 | `--from <path>` | — | Path to a `.jsonl` or `.md` transcript |
-| `--marks "t1,t2"` | all | Comma-separated topics to focus on; others are dropped |
-| `--out <path>` | `{pwd}/chat2k-{date}-{slug}.md` | Absolute output path for the .md note. Default = `<pwd>/chat2k-{date}-{slug}.md` (resolved from the directory the skill is run in) |
-| `--stdin` | off | Read transcript from stdin |
+| `--current` | on | Explicit alias for the default (running session) |
+| `--out <path>` | `{pwd}/chat2k-{date}-{slug}.md` | Output path. Relative paths resolve against `pwd` |
+| `--stdin` | off | Read a markdown transcript from stdin |
 
-**Source resolution (`--current` and bare `/jk:chat2k`):**
+## Modes
 
-The parser does NOT just pick the most-recently-modified `.jsonl`. It works across **any CLI** (claude-code, codex, opencode, cursor) and ranks by content richness:
-
-1. **Detect the active CLI** from env vars (`CLAUDE_CODE_ENTRYPOINT`, `CODEX_CLI`, `OPENCODE_CLI`, `CURSOR_TRACE_ID`) — falls back to scanning well-known session dirs.
-2. **For SQLite-based CLIs (OpenCode):** auto-export the current session to a temp JSONL file. The parser opens `~/.local/share/opencode/opencode.db`, lists sessions for the current cwd, picks the most recent, and writes a JSONL transcript to `/tmp/chat2k-opencode-<session-id>.jsonl`. The existing JSONL parser then reads it as if it were a Claude Code file. Exported file is cached for 60 seconds.
-3. **List that CLI's session files** for the current working directory:
-   - `claude-code` → `~/.claude/projects/<encoded-cwd>/*.jsonl`
-   - `codex` → `~/.codex/sessions/**/*.jsonl`, filtered by `cwd` field inside the file
-   - `opencode` → auto-exported JSONL in `/tmp/chat2k-opencode-<id>.jsonl`
-   - `cursor` → `~/Library/Application Support/Cursor/User/workspaceStorage/**/chat-*/transactions.json`
-4. **Quick-count** user/assistant messages per file (no full parse).
-5. **Drop files below 5 messages** (treat as empty / noise — the "current session just started" case).
-6. **Rank by `(msg_count desc, mtime desc)`.**
-7. **Auto-resolve** when the top candidate has ≥ 2× the count of the runner-up.
-8. **Show `AskUserQuestion` menu** of top 3 candidates when ambiguous.
-
-This means: a brand-new session that just started (very few messages) is skipped in favor of the recent rich session. The user only sees a menu when there are two genuinely rich candidates close in counts.
+| Mode | When | Keep rule |
+|---|---|---|
+| **Whole-session** | no focus text | *Decided* knowledge only (see `references/knowledge-extraction.md`) |
+| **Focus** | focus text given | Everything **reusable about the focus**: concepts, how-to, gotchas, code snippets, comparisons, decisions, open questions. Drop unrelated topics and chat noise |
 
 ## Workflow
 
-### 1. Resolve input
+### 1. Interpret the arguments (agent, not script)
 
-Run the parser to detect and parse the transcript:
+1. Split `$ARGUMENTS` into flags (`--from`, `--current`, `--out`, `--stdin`) and **focus text** (everything else).
+2. From the focus text, strip filler verbs ("extract knowledge of", "tổng hợp", "summarize", "về") to get the **topic** (`react`).
+3. If a topic exists, **expand it into 5–15 search terms** the chat may have used: the topic itself, sub-concepts, APIs, libraries, common abbreviations, English + Vietnamese forms. Example `react` → `react, jsx, tsx, hook, hooks, useState, useEffect, useMemo, rsc, server component, next.js, re-render, virtual dom`. Prefer specific terms; avoid generic words (`state`, `component` alone) that would match everything.
+
+### 2. Parse the transcript
+
+The skill's base directory is printed when the skill loads; call the script by absolute path and build the argv yourself (do not pass `$ARGUMENTS` verbatim):
 
 ```bash
-# Script is stdlib-only — any python3 works.
-# Prefer shared claudekit venv if present.
-~/.claude/skills/.venv/bin/python3 scripts/parse-transcript.py "$ARGUMENTS" \
-  > /tmp/chat2k.in.json \
-  || python3 scripts/parse-transcript.py "$ARGUMENTS" > /tmp/chat2k.in.json
+SCRIPT="<skill-base-dir>/scripts/parse-transcript.py"
+# Stdlib-only — any python3 works. Prefer the shared venv if present.
+PY=~/.claude/skills/.venv/bin/python3; [ -x "$PY" ] || PY=python3
+"$PY" "$SCRIPT" [--from <path>] --terms "react,jsx,hook,useEffect" > "$TMPDIR/chat2k.in.json"
 ```
 
-Parse JSON output: `{source, format, messages: [...], session_meta: {...}}`.
+Omit `--terms` in whole-session mode. Output contract: `references/parser-format.md`. Key fields:
 
-- `source`: resolved transcript path or `current`
-- `format`: `jsonl` | `markdown`
-- `messages`: filtered, normalized `{role, text, timestamp}[]` — only user/assistant turns, noise removed
-- `session_meta`: `{session_id, started_at, last_at, msg_count}`
+- `source` — resolved transcript. The default is the **running session** (Claude Code: matched by `CLAUDE_CODE_SESSION_ID`; other CLIs: newest transcript for the cwd).
+- `messages[]` — `{role, text, timestamp, index?}` with tool calls, tool output, system reminders and skill bodies already stripped.
+- `focus` — `{terms, context, hit_count, total_messages}` when `--terms` was given; kept messages are the hits plus ±2 neighbours.
+- `outline` — user prompts of the whole session, only when `hit_count == 0`.
+- `error` mentioning *in-context* — transcript not found: use the conversation already in your context as the source (focus mode works the same way).
 
-See `references/parser-format.md` for the exact JSON contract and per-CLI quirks.
+### 3. Handle "topic not found"
 
-### 2. Filter to decided knowledge
+If `hit_count == 0`, retry **once** with broader/alternative terms. Still nothing → **do not write a file**. Tell the user the topic was not found and list the subjects the session did cover (derived from `outline`), so they can re-run with one of them.
 
-Skip the LLM filtering step if the chat is short (< 30 turns). For long sessions, group messages into **topic clusters** and decide what to keep:
+### 4. Select knowledge
 
-1. **Topic cluster** = contiguous run of messages on one subject (heuristic: same keyword density, no topic switch).
-2. **Decided signal** = message contains one of: `decision:`, `let's go with`, `use X for Y`, `chốt`, `quyết định`, `dùng X cho Y`, OR the user explicitly asked a question and the assistant answered + user accepted.
-3. **Drop signals** = greetings, retries, "let me check", "give me a sec", tool-call noise, half-sentences, redundant rephrasing.
+- **Focus mode:** read the kept windows; drop any message that matched a term only incidentally (e.g. `react` inside "react to the error"). Keep every reusable piece about the topic — not only decisions. Content about other topics inside the windows is dropped.
+- **Whole-session mode:** cluster topics and keep only *decided* knowledge.
 
-If `--marks` was given, keep only clusters whose topic matches any mark (fuzzy match: case-insensitive substring).
+Heuristics for both: `references/knowledge-extraction.md`.
 
-### 3. Extract structured knowledge per topic
-
-For each surviving topic, extract:
+### 5. Extract structured knowledge per topic
 
 | Field | Meaning |
 |---|---|
 | `topic` | Short title (≤ 8 words) |
-| `subjects` | Things compared (frameworks, tools, libs, approaches) |
-| `pros` | Per-subject advantages (bulleted) |
-| `cons` | Per-subject disadvantages (bulleted) |
+| `key_points` | Concepts / facts / how-to / gotchas the chat established |
+| `subjects` | Things compared (frameworks, tools, libs, approaches) — only if compared |
+| `pros` / `cons` | Per-subject advantages / disadvantages — only if discussed |
 | `use_cases` | When each subject fits |
-| `decision` | What was decided (or "open" if no decision) |
-| `sources` | URLs / doc references extracted from the chat |
+| `snippets` | Short code the chat settled on (trimmed, redacted) |
+| `decision` | What was decided, or "open" |
+| `sources` | URLs / doc references from the chat |
 
-If subjects compare more than 4 items, group adjacent ones into a single topic row.
+Never invent fields the chat did not cover — omit them. If subjects compare more than 4 items, group them into one table.
 
-### 4. Verify references (implicit)
+### 6. Verify references (implicit)
 
 **MUST** verify every URL before including it — verification is required but **never shown in the output**. Run `WebFetch` on each; if it returns non-2xx or the page is empty/garbage, drop the link entirely (or mark as `[broken]` in the References section only if the user asked for transparency).
 
@@ -185,7 +176,7 @@ If subjects compare more than 4 items, group adjacent ones into a single topic r
 
 The output uses clean markdown links `[title](url)` everywhere. Verification is a quality gate, not a display feature.
 
-### 5. Render Markdown
+### 7. Render Markdown
 
 Load `references/output-format.md` for the template. Fill each section. Rules:
 
@@ -196,9 +187,9 @@ Load `references/output-format.md` for the template. Fill each section. Rules:
 - **No metadata footer** (no `Generated`, `Source`, `Messages` lines) — the note is knowledge, not provenance.
 - **No `[verified]` / `[src: ...]` markers anywhere** — use clean `[title](url)` markdown links. Verification is implicit.
 
-### 6. Write file
+### 8. Write file
 
-- Default path: `<pwd>/chat2k-{YYYY-MM-DD}-{slug}.md` — the absolute path is **resolved from the working directory at the moment the skill runs** (i.e. where the user invoked `/jk:chat2k`). If the user is in `/Users/foo/projects/bar`, the default file goes to `/Users/foo/projects/bar/chat2k-{date}-{slug}.md`. Slug = derived from the first surviving topic title (≤ 5 words, lowercase, dash-separated).
+- Default path: `<pwd>/chat2k-{YYYY-MM-DD}-{slug}.md` — the absolute path is **resolved from the working directory at the moment the skill runs** (i.e. where the user invoked `/jk:chat2k`). If the user is in `/Users/foo/projects/bar`, the default file goes to `/Users/foo/projects/bar/chat2k-{date}-{slug}.md`. Slug = the focus topic in focus mode, otherwise the first surviving topic title (≤ 5 words, lowercase, dash-separated).
 - If user gave `--out`, use that absolute path instead. Relative `--out` paths are resolved against `pwd`.
 - Create parent dirs if needed.
 - After writing, print the absolute path + one-line summary to terminal.

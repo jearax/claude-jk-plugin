@@ -1,6 +1,19 @@
 # Knowledge Extraction Heuristics
 
-How to group a normalized chat transcript into **decided knowledge** and drop noise.
+How to turn a normalized chat transcript into reusable knowledge and drop noise.
+
+Two modes:
+- **Whole-session** (no focus text): keep only *decided* knowledge — Steps 1–6 as written.
+- **Focus** (focus text given): the parser already pre-filtered by the agent's expanded terms (hits ± neighbours). Apply **Step 0** first, skip the decided-signal gate in Step 2, then continue with Steps 3–6.
+
+## Step 0 — Focus relevance (focus mode only)
+
+1. **Semantic check per kept message.** Keep a message if it is *about* the focus topic or is the question/answer/follow-up a relevant message depends on. Drop incidental matches (`react` in "react to the error", `hook` meaning a git hook when the focus is React).
+2. **Neighbour pruning.** Neighbours pulled in by the ±context window that discuss another subject are dropped.
+3. **Related sub-concepts count as the topic.** For focus `react`, discussion of `useEffect` cleanup or RSC boundaries is in scope even without the word "React".
+4. **Keep rule:** anything reusable about the topic — definitions, mental models, how-to steps, gotchas, code snippets the chat settled on, comparisons, decisions, and open questions marked as open. Not only decisions.
+5. **Corrections win.** If a later message corrects an earlier claim, keep only the corrected version.
+6. **Nothing left** after this step → treat as *topic not found* (SKILL.md step 3).
 
 ## Step 1 — Topic clustering
 
@@ -15,7 +28,7 @@ A **topic cluster** is a contiguous run of messages on one subject. Heuristic de
    - Same question is being answered across multiple turns.
    - User is clarifying/refining an earlier point.
 
-**Mark-driven filtering** (when `--marks` is given): keep only clusters whose topic tokenizes to share ≥ 1 word with any mark (case-insensitive substring match).
+In focus mode, all clusters already belong to the focus topic; clustering only splits it into sub-topics (`### n.` entries).
 
 ## Step 2 — Decided-signal detection
 
@@ -26,7 +39,8 @@ A cluster contains **decided knowledge** if one of:
 - Q&A + acceptance: user asked a question, assistant answered, next user turn thanks / agrees / moves on (no objection)
 - Citation present: assistant cited an official doc URL AND the answer is non-trivial
 
-If no decided signal → **drop the cluster** (it's discussion, not knowledge).
+Whole-session mode: if no decided signal → **drop the cluster** (it's discussion, not knowledge).
+Focus mode: this gate does not apply — Step 0 already decided relevance. Comparisons without a decision stay, with Decision = "open".
 
 ## Step 3 — Extract fields per topic
 
@@ -35,6 +49,8 @@ For each surviving cluster, fill:
 | Field | How to extract |
 |---|---|
 | `topic` | Concise title (≤ 8 words). Prefer the user's own phrasing if they used one (`let's compare X vs Y` → "X vs Y") |
+| `key_points` | Facts, concepts, how-to steps, gotchas the chat established. Required in focus mode. |
+| `snippets` | Short code the chat settled on (final version only, redacted). |
 | `subjects` | Items compared/discussed (frameworks, libs, tools, approaches). Strip duplicates. |
 | `pros` | Per-subject advantages. From assistant's analysis + user additions. |
 | `cons` | Per-subject disadvantages. Same source. |
@@ -67,6 +83,8 @@ Before clustering, drop messages that are entirely:
 ## Anti-patterns
 
 - **Don't** extract every Q&A as a topic. Only Q&A with a *result the user accepted*.
+- **Don't** let focus mode leak other topics: a message about `kubernetes` that sits in a React window is dropped.
+- **Don't** treat a keyword hit as relevance — Step 0 is a semantic check, not a grep.
 - **Don't** invent pros/cons the chat didn't surface. If the chat only mentioned pros, list only pros.
 - **Don't** infer a decision the chat didn't make. If no decision → write "open" explicitly.
 - **Don't** include URLs the chat mentioned without verifying them.

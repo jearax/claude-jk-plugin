@@ -1,25 +1,50 @@
 # Output Markdown Format
 
-The generated `.md` file follows this template. Fill every section. Skip the References section only if no links survived verification.
+The generated `.md` file follows this template. Section rules:
+
+| Section | When |
+|---|---|
+| Title, summary, Overview, Key Takeaways, Topics | Always |
+| Topic `Key points` | Whenever the chat established facts / how-to / gotchas (always in focus mode) |
+| Topic comparison table | Only when 2+ subjects were compared |
+| Topic `Decision` / `Rationale` | Only when the topic involved a choice (decided or open) |
+| Decisions Summary | Only when at least one topic has a Decision line |
+| References | Only when at least one link survived verification |
+
+In **focus mode** the Title and Overview are about the focus topic only (e.g. "React — knowledge from session"), and sub-topics of it become the `### n.` entries.
 
 ## Template
 
 ```markdown
 # {Title}
 
-> {One-line summary — what was decided, in 1 sentence}
+> {One-line summary — the main takeaway, in 1 sentence}
 
 ---
 
 ## Overview
 
-{2-4 sentences. What was the session about, what subjects were discussed, what's the takeaway in plain language.}
+{2-4 sentences. What was the session (or the focus topic within it) about, what subjects were discussed, what's the takeaway in plain language.}
+
+---
+
+## Key Takeaways
+
+- {3-7 bullets — the most reusable facts / rules of thumb, one line each}
 
 ---
 
 ## Topics
 
 ### 1. {Topic title}
+
+**Key points**:
+- {concept / fact / how-to / gotcha the chat established}
+- {...}
+
+```{lang}
+{short snippet the chat settled on — optional, trimmed, redacted}
+```
 
 **Subjects**: {comma-separated list of compared items}
 

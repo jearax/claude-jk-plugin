@@ -118,9 +118,56 @@ class TestJsonlParser(unittest.TestCase):
         result = pt.parse_jsonl(self.tmp_path)
         self.assertEqual(len(result["messages"]), 1)
         text = result["messages"][0]["text"]
-        self.assertIn("Let me check that.", text)
-        self.assertIn("[tool_use: bash]", text)
-        self.assertIn("[tool_result: ok]", text)
+        self.assertEqual(text, "Let me check that.")
+
+    def test_drops_tool_only_turns(self):
+        self._write(
+            [
+                json.dumps({"type": "user", "message": {"content": [
+                    {"type": "tool_result", "tool_use_id": "t1", "content": "output"}
+                ]}}),
+                json.dumps({"type": "assistant", "message": {"content": [
+                    {"type": "tool_use", "name": "Bash", "input": {}}
+                ]}}),
+                json.dumps({"type": "user", "message": {"content": "real question"}}),
+            ]
+        )
+        result = pt.parse_jsonl(self.tmp_path)
+        self.assertEqual([m["text"] for m in result["messages"]], ["real question"])
+
+    def test_skips_is_meta_turns(self):
+        self._write(
+            [
+                json.dumps({"type": "user", "isMeta": True, "message": {"content": "Base directory for this skill"}}),
+                json.dumps({"type": "user", "message": {"content": "keep"}}),
+            ]
+        )
+        result = pt.parse_jsonl(self.tmp_path)
+        self.assertEqual([m["text"] for m in result["messages"]], ["keep"])
+
+    def test_strips_system_reminders(self):
+        self._write(
+            [
+                json.dumps({"type": "user", "message": {"content":
+                    "<system-reminder>\nhook noise\n</system-reminder>\nWhat is RSC?"}}),
+                json.dumps({"type": "user", "message": {"content":
+                    "<system-reminder>only noise</system-reminder>"}}),
+            ]
+        )
+        result = pt.parse_jsonl(self.tmp_path)
+        self.assertEqual([m["text"] for m in result["messages"]], ["What is RSC?"])
+
+    def test_unwraps_slash_command_envelope(self):
+        self._write(
+            [
+                json.dumps({"type": "user", "message": {"content":
+                    "<command-message>jk:chat2k</command-message>\n"
+                    "<command-name>/jk:chat2k</command-name>\n"
+                    "<command-args>extract knowledge of react</command-args>"}}),
+            ]
+        )
+        result = pt.parse_jsonl(self.tmp_path)
+        self.assertEqual(result["messages"][0]["text"], "/jk:chat2k extract knowledge of react")
 
     def test_session_meta_timestamps(self):
         self._write(
@@ -219,9 +266,35 @@ class TestResolveArgs(unittest.TestCase):
         self.assertEqual(spec["from_path"], "/tmp/x.jsonl")
         self.assertFalse(spec["current"])
 
-    def test_marks(self):
-        spec = pt.resolve_args(["--marks", "auth, deploy"])
-        self.assertEqual(spec["marks"], ["auth", "deploy"])
+    def test_positional_tokens_become_query(self):
+        spec = pt.resolve_args(["extract", "knowledge", "of", "react"])
+        self.assertEqual(spec["query"], "extract knowledge of react")
+        self.assertEqual(spec["terms"], [])
+
+    def test_terms_and_context(self):
+        spec = pt.resolve_args(["--terms", "react, useEffect ,JSX", "--context", "3"])
+        self.assertEqual(spec["terms"], ["react", "useEffect", "JSX"])
+        self.assertEqual(spec["context"], 3)
+
+    def test_invalid_context_warns_and_keeps_default(self):
+        spec = pt.resolve_args(["--context", "lots"])
+        self.assertEqual(spec["context"], 2)
+        self.assertTrue(spec["warnings"])
+
+    def test_marks_flag_removed(self):
+        spec = pt.resolve_args(["--marks", "auth"])
+        self.assertNotIn("marks", spec)
+        self.assertIn("unknown flag ignored: --marks", spec["warnings"])
+
+    def test_single_string_argument_is_resplit(self):
+        spec = pt.resolve_args(["react hooks --terms 'react,useState' --out /tmp/n.md"])
+        self.assertEqual(spec["query"], "react hooks")
+        self.assertEqual(spec["terms"], ["react", "useState"])
+        self.assertEqual(spec["out_path"], "/tmp/n.md")
+
+    def test_single_string_with_unbalanced_quote_falls_back(self):
+        spec = pt.resolve_args(["what's react"])
+        self.assertEqual(spec["query"], "what's react")
 
     def test_out_path(self):
         spec = pt.resolve_args(["--out", "/tmp/note.md"])
@@ -233,21 +306,33 @@ class TestResolveArgs(unittest.TestCase):
 
     def test_combined(self):
         spec = pt.resolve_args(
-            ["--current", "--marks", "auth,db", "--out", "/tmp/n.md"]
+            ["--current", "auth", "flow", "--terms", "auth,db", "--out", "/tmp/n.md"]
         )
         self.assertTrue(spec["current"])
-        self.assertEqual(spec["marks"], ["auth", "db"])
+        self.assertEqual(spec["query"], "auth flow")
+        self.assertEqual(spec["terms"], ["auth", "db"])
         self.assertEqual(spec["out_path"], "/tmp/n.md")
 
 
 class TestEmit(unittest.TestCase):
-    def test_emits_needs_resolution_when_no_source(self):
-        spec = pt.resolve_args([])
-        result = pt.emit(spec)
-        # Either auto-resolved to a real session, or needs_resolution=True
-        # We don't assert either — depends on the host's session dir state.
-        if result.get("needs_resolution"):
-            self.assertNotIn("messages", result) or result["messages"] == []
+    def test_default_uses_current_session(self):
+        with patch.object(pt, "find_current_session", return_value="") as cur:
+            result = pt.emit(pt.resolve_args([]))
+        cur.assert_called_once()
+        self.assertEqual(result["messages"], [])
+        self.assertIn("in-context", result["error"])
+
+    def test_emit_applies_terms_filter(self):
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False) as f:
+            for text in ["hi", "tell me about React", "React is a UI lib", "now kubernetes", "k8s pods"]:
+                f.write(json.dumps({"type": "user", "message": {"content": text}}) + "\n")
+            path = f.name
+        try:
+            result = pt.emit(pt.resolve_args(["--from", path, "--terms", "react", "--context", "0"]))
+            self.assertEqual([m["index"] for m in result["messages"]], [1, 2])
+            self.assertEqual(result["focus"]["hit_count"], 2)
+        finally:
+            os.unlink(path)
 
     def test_emits_from_path(self):
         with tempfile.NamedTemporaryFile(
@@ -264,76 +349,6 @@ class TestEmit(unittest.TestCase):
             self.assertEqual(len(result["messages"]), 1)
         finally:
             os.unlink(path)
-
-
-class TestFindBestSession(unittest.TestCase):
-    """Tests for the smart auto-resolve logic."""
-
-    def setUp(self):
-        # Build a fake session dir with several jsonl files
-        self.tmpdir = tempfile.mkdtemp()
-        self.session_dir = Path(self.tmpdir) / "fake-project"
-        self.session_dir.mkdir()
-
-    def tearDown(self):
-        shutil.rmtree(self.tmpdir)
-
-    def _write_session(self, name: str, msg_count: int, mtime_offset: int = 0):
-        """Write a fake jsonl with N user/assistant messages."""
-        path = self.session_dir / name
-        with open(path, "w", encoding="utf-8") as f:
-            for i in range(msg_count):
-                f.write(
-                    json.dumps(
-                        {"type": "user", "message": {"content": f"msg {i}"}}
-                    )
-                    + "\n"
-                )
-                f.write(
-                    json.dumps(
-                        {"type": "assistant", "message": {"content": f"reply {i}"}}
-                    )
-                    + "\n"
-                )
-        # Set mtime
-        mtime = time.time() - mtime_offset
-        os.utime(path, (mtime, mtime))
-        return path
-
-    def test_empty_session_dir_returns_empty(self):
-        result = pt.find_best_session(session_dir=self.session_dir)
-        self.assertEqual(result["path"], "")
-        self.assertEqual(result["candidates"], [])
-
-    def test_ignores_empty_sessions(self):
-        # Two files: one with 0 messages, one with 20
-        self._write_session("empty.jsonl", 0, mtime_offset=0)
-        rich = self._write_session("rich.jsonl", 20, mtime_offset=60)
-        result = pt.find_best_session(session_dir=self.session_dir)
-        self.assertEqual(result["path"], str(rich))
-
-    def test_picks_highest_count(self):
-        # Two rich files: one with 30 msgs, one with 10
-        best = self._write_session("best.jsonl", 30, mtime_offset=60)
-        self._write_session("less.jsonl", 10, mtime_offset=0)
-        result = pt.find_best_session(session_dir=self.session_dir)
-        self.assertEqual(result["path"], str(best))
-
-    def test_ambiguous_when_close_in_count(self):
-        # Two rich files with similar counts → menu
-        self._write_session("a.jsonl", 25, mtime_offset=60)
-        self._write_session("b.jsonl", 20, mtime_offset=0)
-        result = pt.find_best_session(session_dir=self.session_dir)
-        # Top has 25, runner-up has 20 → 25 < 20*2 = 40 → ambiguous
-        self.assertEqual(result["path"], "")
-        self.assertGreater(len(result["candidates"]), 1)
-
-    def test_clear_winner_when_2x_runner_up(self):
-        # Top has 50, runner-up has 10 → clear winner
-        best = self._write_session("big.jsonl", 50, mtime_offset=60)
-        self._write_session("small.jsonl", 10, mtime_offset=0)
-        result = pt.find_best_session(session_dir=self.session_dir)
-        self.assertEqual(result["path"], str(best))
 
 
 class TestCodexJsonlParser(unittest.TestCase):
@@ -733,6 +748,78 @@ class TestCursorExtract(unittest.TestCase):
         self.assertEqual(len(out), 1)
         self.assertIn("part1", out[0]["message"]["content"])
         self.assertIn("part2", out[0]["message"]["content"])
+
+
+class TestFilterByTerms(unittest.TestCase):
+    def _msgs(self, *texts):
+        return [{"role": "user" if i % 2 == 0 else "assistant", "text": t, "timestamp": None}
+                for i, t in enumerate(texts)]
+
+    def test_whole_word_case_insensitive(self):
+        msgs = self._msgs("React hooks", "reactive streams", "about react.", "unrelated")
+        out = pt.filter_by_terms(msgs, ["react"], context=0)
+        self.assertEqual([m["index"] for m in out["messages"]], [0, 2])
+
+    def test_symbol_terms(self):
+        msgs = self._msgs("use C++ here", "use next.js", "nextjs")
+        out = pt.filter_by_terms(msgs, ["c++", "next.js"], context=0)
+        self.assertEqual([m["index"] for m in out["messages"]], [0, 1])
+
+    def test_context_window_merges_overlaps(self):
+        msgs = self._msgs("q0", "q1", "react a", "q3", "react b", "q5", "q6", "q7")
+        out = pt.filter_by_terms(msgs, ["react"], context=1)
+        self.assertEqual([m["index"] for m in out["messages"]], [1, 2, 3, 4, 5])
+        self.assertEqual(out["focus"]["total_messages"], 8)
+
+    def test_no_hits_returns_user_outline(self):
+        msgs = self._msgs("ask about auth", "answer", "ask about db", "answer")
+        out = pt.filter_by_terms(msgs, ["react"])
+        self.assertEqual(out["messages"], [])
+        self.assertEqual(out["focus"]["hit_count"], 0)
+        self.assertEqual([o["index"] for o in out["outline"]], [0, 2])
+
+
+class TestCurrentSession(unittest.TestCase):
+    def setUp(self):
+        self.home = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.home)
+
+    def test_claude_dir_encodes_non_alphanumerics(self):
+        with patch("pathlib.Path.home", return_value=self.home):
+            d = pt._claude_session_dir("/Users/me/.config/my_app")
+        self.assertEqual(d.name, "-Users-me--config-my-app")
+
+    def test_claude_project_dir_walks_up_from_subdir(self):
+        project = self.home / ".claude" / "projects" / "-repo"
+        project.mkdir(parents=True)
+        with patch("pathlib.Path.home", return_value=self.home):
+            self.assertEqual(pt._claude_project_dir_for("/repo/plugins/x"), project)
+
+    def test_claude_resolves_by_session_id(self):
+        project = self.home / ".claude" / "projects" / "-other-dir"
+        project.mkdir(parents=True)
+        target = project / "sess-123.jsonl"
+        target.write_text("{}\n")
+        (project / "newer.jsonl").write_text("{}\n")
+        with patch("pathlib.Path.home", return_value=self.home), \
+             patch.dict(os.environ, {"CLAUDE_CODE_SESSION_ID": "sess-123"}):
+            self.assertEqual(pt.find_current_session("claude-code"), str(target))
+
+    def test_falls_back_to_newest_file_without_message_threshold(self):
+        project = self.home / ".claude" / "projects" / "-repo"
+        project.mkdir(parents=True)
+        old = project / "old-rich.jsonl"
+        old.write_text('{"type":"user","message":{"content":"x"}}\n' * 50)
+        os.utime(old, (time.time() - 600, time.time() - 600))
+        new = project / "new-short.jsonl"
+        new.write_text('{"type":"user","message":{"content":"x"}}\n')
+        env = {k: v for k, v in os.environ.items() if k != "CLAUDE_CODE_SESSION_ID"}
+        with patch("pathlib.Path.home", return_value=self.home), \
+             patch.dict(os.environ, env, clear=True), \
+             patch("os.getcwd", return_value="/repo"):
+            self.assertEqual(pt.find_current_session("claude-code"), str(new))
 
 
 if __name__ == "__main__":

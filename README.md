@@ -59,7 +59,7 @@ Default mode is `copy`. To re-install after updates, re-run the command.
 |---|---|
 | `jk:learn` | Learn a library/framework via structured research. Modes: `quick`, `full`, `detail`, `overview`, `cheatsheet`. Supports URL input and `--md`/`--html` output. |
 | `jk:translate` | Context-aware bilingual translator (EN/mixed → Vietnamese) for dev/IT content — error messages, tickets, docs, PRs. Verifies uncertain IT terms against official docs. Output: parallel EN↔VI chunks, console-readable. |
-| `jk:chat2k` | Chat-to-Knowledge — extract *decided* knowledge (topics compared, pros/cons, use cases, decisions, verified links) from any CLI chat session (claude, opencode, codex, cursor) into a beautiful Markdown note. Filters noise, never dumps transcripts. |
+| `jk:chat2k` | Chat-to-Knowledge — turn the running chat session (or a transcript from claude, opencode, codex, cursor) into a beautiful Markdown note. Give a free-text focus to extract just one topic from a long multi-topic session; without one it keeps *decided* knowledge (comparisons, pros/cons, use cases, decisions, verified links). Filters noise, never dumps transcripts. |
 | `jk:leetcode-problem` | LeetCode practice scaffolder — research a problem by id/slug/URL, generate empty `solve`/`solve2`/… stubs with rich doc comments (summary, happy-case example, complexity ladder, keywords) + failing tests — identically for every language app in the practice repo. Remembers the active problem + chat language for the session. `--explain` = adaptive guided discussion until the user understands, then offers to scaffold. |
 
 ## Usage examples
@@ -72,9 +72,9 @@ Default mode is `copy`. To re-install after updates, re-run the command.
 
 /jk:translate Fix the flaky test in auth.spec.ts. The JWT expires before the assertion runs.
 
-/jk:chat2k --current
-/jk:chat2k --from /path/to/session.jsonl --out ~/notes/auth-review.md
-/jk:chat2k --current --marks "auth,deployment"
+/jk:chat2k
+/jk:chat2k extract knowledge of react
+/jk:chat2k auth flow --from /path/to/session.jsonl --out ~/notes/auth-review.md
 
 /jk:leetcode-problem 217
 /jk:leetcode-problem two-sum
