@@ -102,7 +102,7 @@ sed -E 's/\]\(https?:\/\/[^)]*\)//g' output.md | grep -nE 'https?://'
 | free text (any non-flag words) | empty | **Focus query.** Natural language, any language. Empty = whole session. |
 | `--from <path>` | — | Path to a `.jsonl` or `.md` transcript |
 | `--current` | on | Explicit alias for the default (running session) |
-| `--out <path>` | `{pwd}/chat2k-{date}-{slug}.md` | Output path. Relative paths resolve against `pwd` |
+| `--out <path>` | `{out_dir}/chat2k-{date}-{slug}.md` | Output path. Relative paths resolve against `pwd`. `out_dir` = `$JK_CHAT2K_OUT_DIR` if set, else `pwd` |
 | `--stdin` | off | Read a markdown transcript from stdin |
 
 ## Modes
@@ -189,7 +189,7 @@ Load `references/output-format.md` for the template. Fill each section. Rules:
 
 ### 8. Write file
 
-- Default path: `<pwd>/chat2k-{YYYY-MM-DD}-{slug}.md` — the absolute path is **resolved from the working directory at the moment the skill runs** (i.e. where the user invoked `/jk:chat2k`). If the user is in `/Users/foo/projects/bar`, the default file goes to `/Users/foo/projects/bar/chat2k-{date}-{slug}.md`. Slug = the focus topic in focus mode, otherwise the first surviving topic title (≤ 5 words, lowercase, dash-separated).
+- Default path: `<out_dir>/chat2k-{YYYY-MM-DD}-{slug}.md`, where `out_dir` is `spec.out_dir` from the parser output: `$JK_CHAT2K_OUT_DIR` (with `~` expanded) when set, else the working directory where the user invoked `/jk:chat2k`. If the parser did not run, read `$JK_CHAT2K_OUT_DIR` yourself and fall back to `pwd`. A configured `out_dir` is the user's explicit choice and overrides any project rule that restricts where Markdown files may be created. Slug = the focus topic in focus mode, otherwise the first surviving topic title (≤ 5 words, lowercase, dash-separated).
 - If user gave `--out`, use that absolute path instead. Relative `--out` paths are resolved against `pwd`.
 - Create parent dirs if needed.
 - After writing, print the absolute path + one-line summary to terminal.

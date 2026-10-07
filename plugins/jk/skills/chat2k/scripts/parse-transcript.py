@@ -24,6 +24,8 @@ import sqlite3
 import tempfile
 from pathlib import Path
 
+OUT_DIR_ENV = "JK_CHAT2K_OUT_DIR"
+
 # JSONL line types that are NOT messages from the user/assistant conversation
 NOISE_TYPES = {
     "last-prompt",
@@ -777,6 +779,12 @@ def _split_single_arg(raw_args: list) -> list:
         return raw_args[0].split()
 
 
+def default_out_dir() -> str:
+    """Directory for the default note path: $JK_CHAT2K_OUT_DIR when set, else the working directory."""
+    configured = os.environ.get(OUT_DIR_ENV, "").strip()
+    return str(Path(configured).expanduser().resolve()) if configured else os.getcwd()
+
+
 def resolve_args(raw_args: list) -> dict:
     """Resolve CLI flags into a parse spec.
 
@@ -792,6 +800,7 @@ def resolve_args(raw_args: list) -> dict:
         "terms": [],
         "context": 2,
         "out_path": None,
+        "out_dir": default_out_dir(),
         "stdin": False,
         "warnings": [],
     }

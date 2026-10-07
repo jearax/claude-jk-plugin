@@ -55,6 +55,7 @@ This document defines the JSON contract emitted by `scripts/parse-transcript.py`
 | `--from <path>` / `--stdin` | Explicit transcript source |
 | `--current` | Explicit alias for the default (running session) |
 | `--out <path>` | Echoed in `spec` for the agent |
+| (env) `JK_CHAT2K_OUT_DIR` | Resolved into `spec.out_dir` (absolute, `~` expanded); `pwd` when unset or empty |
 
 If the whole argument string arrives as a single argv item (e.g. `script.py "$ARGUMENTS"`), it is re-split with `shlex` (falling back to whitespace on unbalanced quotes). Unknown flags are ignored and reported in `spec.warnings`.
 

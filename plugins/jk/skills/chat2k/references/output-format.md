@@ -135,9 +135,9 @@ One blank line max between entries. **Each entry: `[title](url) — one-line des
 
 ## Filename
 
-Default: `<pwd>/chat2k-{YYYY-MM-DD}-{slug}.md` — absolute path **resolved from the current working directory at run time**.
+Default: `<out_dir>/chat2k-{YYYY-MM-DD}-{slug}.md` — absolute path.
 
-- `{pwd}` = the directory the user is in when invoking `/jk:chat2k` (e.g. `/Users/foo/projects/bar`). The default file lands in that directory, not in `~/.claude/notes/`.
+- `{out_dir}` = `spec.out_dir` from the parser: `$JK_CHAT2K_OUT_DIR` (with `~` expanded) when set, else the directory the user is in when invoking `/jk:chat2k` (e.g. `/Users/foo/projects/bar`).
 - `slug` = lowercase, dash-separated, max 5 words from the first topic title.
 - Date is the session's last timestamp (fallback: current date).
 - If user passed `--out`, that absolute path wins. A relative `--out` is resolved against `pwd`.
