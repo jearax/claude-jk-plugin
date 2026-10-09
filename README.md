@@ -61,6 +61,7 @@ Default mode is `copy`. To re-install after updates, re-run the command.
 | `jk:translate` | Context-aware bilingual translator (EN/mixed → Vietnamese) for dev/IT content — error messages, tickets, docs, PRs. Verifies uncertain IT terms against official docs. Output: parallel EN↔VI chunks, console-readable. |
 | `jk:chat2k` | Chat-to-Knowledge — turn the running chat session (or a transcript from claude, opencode, codex, cursor) into a beautiful Markdown note. Give a free-text focus to extract just one topic from a long multi-topic session; without one it keeps *decided* knowledge (comparisons, pros/cons, use cases, decisions, verified links). Filters noise, never dumps transcripts. |
 | `jk:leetcode-problem` | LeetCode practice scaffolder — research a problem by id/slug/URL, generate empty `solve`/`solve2`/… stubs with rich doc comments (summary, happy-case example, complexity ladder, keywords) + failing tests — identically for every language app in the practice repo. Remembers the active problem + chat language for the session. `--explain` = adaptive guided discussion until the user understands, then offers to scaffold. |
+| `jk:prune-comments` | Remove junk code comments and tighten the valuable ones without touching code. Tiered rules: tool directives always kept → `--keep`/`--junk` → your `junk-catalog.md` → anti-slop baseline. Runs on pending git changes (or `--full`) behind a temporary checkpoint commit, then asks Accept/Reject. |
 
 ## Usage examples
 
@@ -84,6 +85,10 @@ Default mode is `copy`. To re-install after updates, re-run the command.
 /jk:leetcode-problem 217
 /jk:leetcode-problem two-sum
 /jk:leetcode-problem --explain
+
+/jk:prune-comments
+/jk:prune-comments chỉ dọn src/auth, bỏ qua test
+/jk:prune-comments --full --junk "section banners in tests" --keep "Vietnamese business-rule comments"
 ```
 
 ## Migrating from `ckc` (v1.x → v2.0.0)
@@ -137,6 +142,12 @@ plugins/
         SKILL.md            # name: jk:leetcode-problem
         references/
         scripts/
+      prune-comments/
+        SKILL.md            # name: jk:prune-comments
+        references/         # keep-list, junk-catalog (yours), antislop, tighten-rules, patterns.json
+        scripts/
+        tests/
+        evals/
 ```
 
 Marketplace containing a single plugin (`jk`). Add more plugins under `plugins/<name>/` and register in `.claude-plugin/marketplace.json`.
@@ -144,3 +155,5 @@ Marketplace containing a single plugin (`jk`). Add more plugins under `plugins/<
 ## License
 
 MIT © jjuidev
+
+`jk:prune-comments` adapts patterns from [miqdadbadjuber/anti-slop](https://github.com/miqdadbadjuber/anti-slop) (MIT).

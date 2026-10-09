@@ -1,0 +1,200 @@
+{
+  "skill": "prune-comments",
+  "version": "1.0.0",
+  "description": "Eval cases for prune-comments: trigger accuracy, tier precedence, tightening fidelity, code safety, and the checkpoint accept/reject contract.",
+  "cases": [
+    {
+      "id": "trigger-en",
+      "prompt": "clean up the AI comments in my pending changes",
+      "intent": "English trigger: activates jk:prune-comments on the pending diff.",
+      "assertions": [
+        "Runs `git-checkpoint.py status` then `begin` without --full.",
+        "Ends with an Accept/Reject question."
+      ]
+    },
+    {
+      "id": "trigger-vi",
+      "prompt": "dọn comment rác trong diff này giúp mình",
+      "intent": "Vietnamese trigger.",
+      "assertions": [
+        "Activates jk:prune-comments.",
+        "Summary is in Vietnamese; comments in code keep their original language."
+      ]
+    },
+    {
+      "id": "negative-write-docs",
+      "prompt": "add JSDoc comments to every exported function in src/api",
+      "intent": "Adjacent negative: writing docs is not pruning.",
+      "assertions": [
+        "Does not activate jk:prune-comments."
+      ]
+    },
+    {
+      "id": "baseline-junk-removed",
+      "prompt": "/jk:prune-comments",
+      "fixture": "pending file with `// ====== AUTH ======`, `// Step 1: validate`, `} // end if`, `// Updated to fix the bug`, and the two-line Stripe webhook retry comment",
+      "intent": "T3 junk deleted, T3 keep survives.",
+      "assertions": [
+        "Banner, step narration, end marker, and change-log comments are deleted with deciding tier T3.",
+        "The Stripe webhook comment remains and keeps both facts."
+      ]
+    },
+    {
+      "id": "t0-directive-kept",
+      "prompt": "/jk:prune-comments",
+      "fixture": "`// Helper function` directly above `// eslint-disable-next-line no-console` above `console.log(x)`",
+      "intent": "T0 protects tool directives even next to junk.",
+      "assertions": [
+        "`// Helper function` is deleted.",
+        "`// eslint-disable-next-line no-console` is unchanged and still on the line directly above `console.log(x)`."
+      ]
+    },
+    {
+      "id": "t0-explicit-override",
+      "prompt": "/jk:prune-comments --junk \"eslint-disable-next-line comments\"",
+      "fixture": "same as t0-directive-kept",
+      "intent": "Explicit --junk naming a T0 pattern overrides it with a warning.",
+      "assertions": [
+        "The eslint-disable-next-line comment is deleted.",
+        "Its summary row is marked T0⚠."
+      ]
+    },
+    {
+      "id": "t2-keep-blocks-t3",
+      "prompt": "/jk:prune-comments",
+      "fixture": "junk-catalog.md `## Keep` entry: 'Step comments in migration scripts'; pending migrations/001.sql with `-- Step 1: add column`",
+      "intent": "Owner Keep outranks the antislop baseline and blocks tightening.",
+      "assertions": [
+        "`-- Step 1: add column` is unchanged.",
+        "No summary row is emitted for it, or it is reported as kept by T2."
+      ]
+    },
+    {
+      "id": "t1-keep-free-text",
+      "prompt": "/jk:prune-comments --keep \"Vietnamese business-rule comments\"",
+      "fixture": "`// Đơn hàng quá 30 ngày không được hoàn tiền, vì kế toán đã chốt sổ cuối tháng nên không thể hoàn` above a refund check",
+      "intent": "T1 keep leaves the comment untouched, including no tightening.",
+      "assertions": [
+        "The Vietnamese comment is byte-identical after the run."
+      ]
+    },
+    {
+      "id": "tighten-keeps-link",
+      "prompt": "/jk:prune-comments",
+      "fixture": "three-line Safari resize workaround comment with a bugs.webkit.org link and version history",
+      "intent": "Tightening removes padding but keeps the link and the fact.",
+      "assertions": [
+        "Result is one or two lines.",
+        "The bugs.webkit.org URL is still present.",
+        "Version history text is gone."
+      ]
+    },
+    {
+      "id": "code-untouched",
+      "prompt": "/jk:prune-comments",
+      "fixture": "`const url = \"http://x.io\"; // the url` and `total = a + b  # add a and b`",
+      "intent": "Trailing comment removal never alters code or string literals.",
+      "assertions": [
+        "Lines become `const url = \"http://x.io\";` and `total = a + b`.",
+        "`git diff <ckpt>` contains no change to any string literal or expression."
+      ]
+    },
+    {
+      "id": "no-changes-asks",
+      "prompt": "/jk:prune-comments",
+      "fixture": "clean working tree",
+      "intent": "No pending changes → ask instead of guessing.",
+      "assertions": [
+        "`begin` exits 2 with no-changes.",
+        "Asks the user whether to scan the whole tree or stop; does not run --full on its own."
+      ]
+    },
+    {
+      "id": "reject-restores",
+      "prompt": "/jk:prune-comments → user answers Reject",
+      "fixture": "pending changes with one file partially staged and one untracked file",
+      "intent": "Reject returns the repo to the exact pre-run state.",
+      "assertions": [
+        "`reject` exits 0.",
+        "File contents, `git status --porcelain`, and `git write-tree` match the pre-run values.",
+        "No checkpoint commit remains in `git log`."
+      ]
+    },
+    {
+      "id": "interrupted-run-recovered",
+      "prompt": "/jk:prune-comments",
+      "fixture": "state file from a previous unfinished run",
+      "intent": "Pending checkpoint is resolved before new work.",
+      "assertions": [
+        "Reports the pending run and asks Accept/Reject for it before calling `begin`."
+      ]
+    },
+    {
+      "id": "t2-trivial-code-narration",
+      "prompt": "/jk:prune-comments",
+      "fixture": "`// Sum a and b` above `const total = sum(a + b)`; `// Check if list is empty` above `if (!list.length) return []`",
+      "intent": "T2: comments narrating code a mid-level dev reads at a glance are deleted.",
+      "assertions": [
+        "Both comments are deleted with deciding tier T2.",
+        "The code lines are unchanged."
+      ]
+    },
+    {
+      "id": "t2-standard-loop-and-algorithm",
+      "prompt": "/jk:prune-comments",
+      "fixture": "`// Loop from 0 to length, and handle elements` above an index for-loop; `// Swap the two elements` above `[a[i], a[j]] = [a[j], a[i]]`",
+      "intent": "T2: industry-standard constructs and textbook algorithm steps are junk.",
+      "assertions": [
+        "Both comments are deleted with deciding tier T2."
+      ]
+    },
+    {
+      "id": "t2-placeholder-skeleton",
+      "prompt": "/jk:prune-comments",
+      "fixture": "new scaffolded component with `// Constructor` above `constructor() {}` and `// Your code here` inside a stub",
+      "intent": "T2: comments on boilerplate and stubs are junk.",
+      "assertions": [
+        "Both comments are deleted with deciding tier T2."
+      ]
+    },
+    {
+      "id": "t2-why-on-simple-code-kept",
+      "prompt": "/jk:prune-comments",
+      "fixture": "`setTimeout(focus, 0) // Safari needs a tick before focus` and `// Binary search is safe here: rows come sorted by createdAt from the index` above a binary search",
+      "intent": "T2 Keep (why, not what) beats T2 Junk even when the code is simple or textbook.",
+      "assertions": [
+        "Both comments are byte-identical after the run.",
+        "Neither is tightened."
+      ]
+    },
+    {
+      "id": "t2-what-on-complex-code",
+      "prompt": "/jk:prune-comments",
+      "fixture": "`// Get the token from the header, decode it, and attach the user to the request` above a 15-line auth middleware",
+      "intent": "T2 'States what, not why' deletes a what-only comment even on complex code.",
+      "assertions": [
+        "The comment is deleted with deciding tier T2.",
+        "No replacement comment is invented."
+      ]
+    },
+    {
+      "id": "t2-mixed-what-why-reduced",
+      "prompt": "/jk:prune-comments",
+      "fixture": "`// Fetch user, then cache it for 5 minutes because the profile API is rate-limited` above a fetch-and-cache block",
+      "intent": "Mixed what + why keeps only the why.",
+      "assertions": [
+        "Result keeps the rate-limit reason.",
+        "The 'fetch user, then cache' description is gone."
+      ]
+    },
+    {
+      "id": "t2-public-api-contract-kept",
+      "prompt": "/jk:prune-comments",
+      "fixture": "`/** Returns the price in cents; throws RangeError when qty < 1. */` above `export function quote(qty)`",
+      "intent": "Public API contract Keep beats 'States what, not why'.",
+      "assertions": [
+        "The doc comment is byte-identical after the run."
+      ]
+    }
+  ]
+}

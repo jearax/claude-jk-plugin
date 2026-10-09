@@ -1,0 +1,147 @@
+{
+  "$comment": "Machine-readable rules shared by scripts/git-checkpoint.py (ignore) and scripts/comment-lint-hook.py (keep, junk). Regexes are matched case-insensitively against the comment body with the comment marker stripped. Junk here is the high-precision subset of references/antislop.md; keep is the regex form of references/keep-list.md.",
+  "ignore": {
+    "dirs": [
+      ".git",
+      "node_modules",
+      "dist",
+      "build",
+      "vendor",
+      "__snapshots__"
+    ],
+    "globs": [
+      "*.min.*",
+      "*.map",
+      "*.lock",
+      "package-lock.json",
+      "pnpm-lock.yaml",
+      "yarn.lock",
+      "go.sum",
+      "CHANGELOG*"
+    ],
+    "generated_markers": [
+      "Code generated",
+      "@generated",
+      "DO NOT EDIT"
+    ]
+  },
+  "comment_syntax": {
+    "//": [
+      ".js",
+      ".jsx",
+      ".mjs",
+      ".cjs",
+      ".ts",
+      ".tsx",
+      ".mts",
+      ".cts",
+      ".go",
+      ".rs",
+      ".java",
+      ".kt",
+      ".kts",
+      ".swift",
+      ".c",
+      ".h",
+      ".cc",
+      ".cpp",
+      ".hpp",
+      ".cs",
+      ".php",
+      ".scala",
+      ".dart",
+      ".scss",
+      ".less",
+      ".vue",
+      ".svelte"
+    ],
+    "#": [
+      ".py",
+      ".sh",
+      ".bash",
+      ".zsh",
+      ".rb",
+      ".yaml",
+      ".yml",
+      ".toml",
+      ".r",
+      ".pl",
+      ".ex",
+      ".exs",
+      ".tf"
+    ],
+    "--": [
+      ".sql",
+      ".lua",
+      ".hs"
+    ]
+  },
+  "keep": [
+    {
+      "id": "lint-directive",
+      "regex": "eslint-|@ts-(expect-error|ignore|nocheck|check)|biome-ignore|prettier-ignore|stylelint-|\\bnoqa\\b|type:\\s*ignore|pyright:|mypy:|pylint:|fmt:\\s*(off|on|skip)|isort:|\\bnolint\\b|NOSONAR|rubocop:|swiftlint:|@phpstan-|markdownlint-"
+    },
+    {
+      "id": "build-pragma",
+      "regex": "^!|-\\*-.*-\\*-|^go:|^\\+build\\b|webpack[A-Z]\\w*\\s*:|@vite-ignore|@__PURE__|@jsx|<reference\\s|^@flow\\b|^#?(end)?region\\b|^language="
+    },
+    {
+      "id": "coverage",
+      "regex": "(istanbul|c8|v8)\\s+ignore|pragma:\\s*no\\s*cover|coverage:ignore"
+    },
+    {
+      "id": "generated",
+      "regex": "code generated|@generated|do not edit"
+    },
+    {
+      "id": "doc-tag",
+      "regex": "@(deprecated|internal|public|alpha|beta|swagger|openapi|route|param\\s*\\{|type\\s*\\{|returns?\\s*\\{)"
+    },
+    {
+      "id": "legal",
+      "regex": "spdx-license-identifier|copyright|\\(c\\)\\s*\\d{4}|licen[cs]ed? under"
+    }
+  ],
+  "junk": [
+    {
+      "id": "decorative-separator",
+      "label": "decorative separator",
+      "regex": "^[=\\-*#~_+/]{4,}|^[=\\-*#~]{3,}.*[=\\-*#~]{3,}$"
+    },
+    {
+      "id": "workflow-narration",
+      "label": "step-by-step narration",
+      "regex": "^(step|bước)\\s*\\d+\\b"
+    },
+    {
+      "id": "end-marker",
+      "label": "end marker",
+      "regex": "^end(\\s+of)?\\s+(if|else|for|foreach|while|loop|switch|try|catch|function|func|def|method|class|block|component)\\b"
+    },
+    {
+      "id": "change-log",
+      "label": "change-log about the edit",
+      "regex": "^(updated|added|changed|modified|refactored|replaced|removed)\\s+(to|the|this|per|new|logic|code|function|method)\\b|^fixed?:\\s|\\b(as requested|per (your|the user'?s?) request)\\b"
+    },
+    {
+      "id": "placeholder",
+      "label": "placeholder or disclaimer",
+      "regex": "\\bin a (real|production)[- ](app|application|implementation|project|world|scenario|system)\\b|\\breplace (this )?with (your|the|real|actual)\\s+(own\\s+)?(logic|implementation|code|api|data|key)\\b|\\bthis is a (simplified|simple|basic|placeholder|mock|dummy) (implementation|version|example)\\b"
+    },
+    {
+      "id": "empty-label",
+      "label": "empty label",
+      "regex": "^(main|core|business) logic\\W*$|^helpers?( functions?)?\\W*$|^(entry point|error handling|imports?|variables?|constants?|types?|exports?|initiali[sz]ation|setup|utils?|utilities)\\W*$|^(note|important):\\s*(this is important|please read)\\W*$"
+    },
+    {
+      "id": "vague-todo",
+      "label": "vague TODO",
+      "regex": "^(todo|fixme)\\b[\\s:\\-]*(improve|optimi[sz]e|refactor|clean ?up|add more|fix)(\\s+(this|it|later|validation|error handling|performance))?\\W*$"
+    },
+    {
+      "id": "decorative-emoji",
+      "label": "decorative emoji",
+      "regex": "^(✅|🚀|✨|🎯|📝|⚡|🔥|💡|🔧|📦|🧹|🛠|🔒|📌)"
+    }
+  ]
+}
