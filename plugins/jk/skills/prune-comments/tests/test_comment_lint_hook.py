@@ -1,0 +1,219 @@
+#!/usr/bin/env python3
+"""Tests for prune-comments/scripts/comment-lint-hook.py.
+
+Run with: python3 tests/test_comment_lint_hook.py
+Stdlib-only.
+"""
+import importlib.util as _ilu
+import json
+import os
+import subprocess
+import sys
+import tempfile
+import unittest
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+SCRIPT = os.path.join(os.path.dirname(HERE), "scripts", "comment-lint-hook.py")
+_spec = _ilu.spec_from_file_location("comment_lint_hook", SCRIPT)
+hook = _ilu.module_from_spec(_spec)
+_spec.loader.exec_module(hook)
+RULES = hook.Rules()
+
+
+class HookCase(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.cwd = self._tmp.name
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def write_file(self, rel, text):
+        path = os.path.join(self.cwd, rel)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        return path
+
+    def run_write(self, rel, text, env=None):
+        path = self.write_file(rel, text)
+        payload = {"tool_name": "Write", "cwd": self.cwd, "tool_input": {"file_path": path, "content": text}}
+        return hook.analyze(payload, env=env or {}, rules=RULES)
+
+    def context(self, result):
+        return result["hookSpecificOutput"]["additionalContext"]
+
+
+class TestDetection(HookCase):
+    def test_flags_obvious_junk_with_line_numbers(self):
+        text = (
+            "// ========== AUTH ==========\n"
+            "function login(u) {\n"
+            "  // Step 1: validate input\n"
+            "  if (!u) return null; // end if\n"
+            "  // Updated to fix the bug\n"
+            "  return u; // In a real app you would hash this\n"
+            "}\n"
+        )
+        ctx = self.context(self.run_write("src/auth.ts", text))
+        for expected in ("L1 ", "decorative separator", "L3 ", "step-by-step narration",
+                         "L4 ", "end marker", "L5 ", "change-log", "L6 ", "placeholder"):
+            self.assertIn(expected, ctx)
+        self.assertIn("src/auth.ts", ctx)
+
+    def test_valuable_comments_not_flagged(self):
+        text = (
+            "# Stripe may retry webhook deliveries for up to three days.\n"
+            "# Ignore duplicate events using the event ID.\n"
+            "def handle(evt):\n"
+            "    return evt\n"
+        )
+        self.assertIsNone(self.run_write("app/webhook.py", text))
+
+    def test_tier0_directives_kept(self):
+        text = (
+            "// eslint-disable-next-line no-console\n"
+            "console.log(x)\n"
+            "// @ts-expect-error step 1 of migration\n"
+            "/// <reference types=\"vite/client\" />\n"
+            "//go:build linux\n"
+        )
+        self.assertIsNone(self.run_write("src/a.ts", text))
+
+    def test_url_inside_string_is_not_a_comment(self):
+        text = 'const url = "http://example.com/// Step 1";\nconst b = \'a // end if\';\n'
+        self.assertIsNone(self.run_write("src/u.ts", text))
+
+    def test_trailing_comment_after_balanced_code(self):
+        result = self.run_write("x.py", 'name = "a#b"  # Step 2: assign\n')
+        self.assertIn("step-by-step narration", self.context(result))
+
+    def test_vietnamese_step(self):
+        result = self.run_write("y.ts", "// Bước 1: kiểm tra input\nconst a = 1\n")
+        self.assertIn("step-by-step narration", self.context(result))
+
+    def test_doc_comments_skipped(self):
+        self.assertIsNone(self.run_write("lib.rs", "/// Step 1 of the protocol handshake.\npub fn a() {}\n"))
+
+    def test_findings_capped(self):
+        text = "".join(f"// Step {i}\nx{i} = {i}\n" for i in range(1, 15))
+        ctx = self.context(self.run_write("many.js", text))
+        self.assertIn("+4 more", ctx)
+        self.assertEqual(ctx.count("\n- L"), 10)
+
+
+class TestScope(HookCase):
+    def test_disabled_by_option(self):
+        for value in ("false", "0", "No", "off"):
+            self.assertIsNone(self.run_write("a.ts", "// Step 1\n", env={hook.TOGGLE_ENV: value}))
+
+    def test_enabled_values(self):
+        self.assertIsNotNone(self.run_write("a.ts", "// Step 1\n", env={hook.TOGGLE_ENV: "true"}))
+
+    def test_ignored_dir_and_unsupported_ext(self):
+        self.assertIsNone(self.run_write("dist/a.js", "// Step 1\n"))
+        self.assertIsNone(self.run_write("notes.md", "// Step 1\n"))
+
+    def test_ignore_uses_path_relative_to_cwd(self):
+        nested = os.path.join(self.cwd, "build", "project")
+        os.makedirs(nested)
+        path = os.path.join(nested, "a.ts")
+        with open(path, "w") as fh:
+            fh.write("// Step 1\n")
+        payload = {"tool_name": "Write", "cwd": nested, "tool_input": {"file_path": path, "content": "// Step 1\n"}}
+        self.assertIsNotNone(hook.analyze(payload, env={}, rules=RULES))
+
+    def test_generated_file_skipped(self):
+        self.assertIsNone(self.run_write("gen.go", "// Code generated by x. DO NOT EDIT.\n// Step 1\n"))
+
+    def test_edit_scans_only_new_string_with_offset(self):
+        path = self.write_file("e.ts", "// Step 1: old human comment\nconst a = 1\n// Step 2: new\nconst b = 2\n")
+        payload = {
+            "tool_name": "Edit", "cwd": self.cwd,
+            "tool_input": {"file_path": path, "old_string": "x", "new_string": "// Step 2: new\nconst b = 2\n"},
+        }
+        ctx = self.context(hook.analyze(payload, env={}, rules=RULES))
+        self.assertIn("L3 ", ctx)
+        self.assertNotIn("old human comment", ctx)
+
+    def test_multiedit_defensive(self):
+        path = self.write_file("m.ts", "const a = 1 // end if\n")
+        payload = {
+            "tool_name": "MultiEdit", "cwd": self.cwd,
+            "tool_input": {"file_path": path, "edits": [{"old_string": "x", "new_string": "const a = 1 // end if"}, "bad"]},
+        }
+        self.assertIn("end marker", self.context(hook.analyze(payload, env={}, rules=RULES)))
+
+    def test_other_tools_ignored(self):
+        self.assertIsNone(hook.analyze({"tool_name": "Bash", "tool_input": {"command": "ls"}}, env={}, rules=RULES))
+
+
+class TestUserCatalog(HookCase):
+    def catalog_rules(self, text):
+        path = self.write_file("catalog.md", text)
+        return hook.Rules(catalog_path=path)
+
+    def scan(self, rules, line):
+        return hook.scan(line + "\n", "//", rules, 1)
+
+    def test_parses_sections_and_ignores_html_comments_and_bad_regex(self):
+        rules = self.catalog_rules(
+            "## Junk\n<!--\n### Hidden\n- **Regex:** `^hidden$`\n-->\n"
+            "### Call API\n- **Regex:** `^call (the )?api$`\n"
+            "### Broken\n- **Regex:** `([`\n"
+            "## Keep\n### Ticket refs\n- **Regex:** `\\bJIRA-\\d+`\n"
+        )
+        self.assertEqual([label for label, _ in rules.user_junk], ["your rule: call api"])
+        self.assertEqual(len(rules.user_keep), 1)
+        self.assertEqual(self.scan(rules, "// call the api")[0][2], "your rule: call api")
+        self.assertEqual(self.scan(rules, "// hidden"), [])
+
+    def test_user_keep_beats_user_and_baseline_junk(self):
+        rules = self.catalog_rules("## Junk\n### Steps\n- **Regex:** `^step`\n## Keep\n### Migrations\n- **Regex:** `migration`\n")
+        self.assertEqual(self.scan(rules, "// Step 1: run migration 042"), [])
+        self.assertEqual(self.scan(rules, "// Step 1: validate")[0][2], "your rule: steps")
+
+    def test_user_junk_checked_before_baseline(self):
+        rules = self.catalog_rules("## Junk\n### Placeholder\n- **Regex:** `^todo: implement$`\n")
+        self.assertEqual(self.scan(rules, "// TODO: implement")[0][2], "your rule: placeholder")
+
+    def test_missing_catalog_is_empty(self):
+        rules = hook.Rules(catalog_path=os.path.join(self.cwd, "nope.md"))
+        self.assertEqual((rules.user_keep, rules.user_junk), ([], []))
+
+    def test_shipped_catalog_examples(self):
+        flagged = [
+            "// Sum a and b", "// Loop from 0 to length, and handle elements", "// Iterate over the users",
+            "// Your code here", "// Implement logic", "// Add your implementation here",
+        ]
+        kept = [
+            "// Iterate over shards in reverse to release locks",
+            "// Implement retry with jitter to avoid thundering herd",
+            "// Sum of line items excludes tax per VAT rule 7",
+        ]
+        for line in flagged:
+            self.assertTrue(self.scan(RULES, line), line)
+        for line in kept:
+            self.assertEqual(self.scan(RULES, line), [], line)
+
+
+class TestCli(HookCase):
+    def run_cli(self, stdin):
+        return subprocess.run([sys.executable, SCRIPT], input=stdin, capture_output=True, text=True,
+                              env={**os.environ, hook.TOGGLE_ENV: "true"})
+
+    def test_cli_prints_hook_json(self):
+        path = self.write_file("a.ts", "// Step 1\n")
+        proc = self.run_cli(json.dumps({"tool_name": "Write", "cwd": self.cwd,
+                                        "tool_input": {"file_path": path, "content": "// Step 1\n"}}))
+        self.assertEqual(proc.returncode, 0)
+        out = json.loads(proc.stdout)
+        self.assertEqual(out["hookSpecificOutput"]["hookEventName"], "PostToolUse")
+
+    def test_cli_garbage_input_is_silent(self):
+        proc = self.run_cli("not json")
+        self.assertEqual((proc.returncode, proc.stdout, proc.stderr), (0, "", ""))
+
+
+if __name__ == "__main__":
+    unittest.main(verbosity=2)

@@ -61,7 +61,7 @@ Default mode is `copy`. To re-install after updates, re-run the command.
 | `jk:translate` | Context-aware bilingual translator (EN/mixed → Vietnamese) for dev/IT content — error messages, tickets, docs, PRs. Verifies uncertain IT terms against official docs. Output: parallel EN↔VI chunks, console-readable. |
 | `jk:chat2k` | Chat-to-Knowledge — turn the running chat session (or a transcript from claude, opencode, codex, cursor) into a beautiful Markdown note. Give a free-text focus to extract just one topic from a long multi-topic session; without one it keeps *decided* knowledge (comparisons, pros/cons, use cases, decisions, verified links). Filters noise, never dumps transcripts. |
 | `jk:leetcode-problem` | LeetCode practice scaffolder — research a problem by id/slug/URL, generate empty `solve`/`solve2`/… stubs with rich doc comments (summary, happy-case example, complexity ladder, keywords) + failing tests — identically for every language app in the practice repo. Remembers the active problem + chat language for the session. `--explain` = adaptive guided discussion until the user understands, then offers to scaffold. |
-| `jk:prune-comments` | Remove junk code comments and tighten the valuable ones without touching code. Tiered rules: tool directives always kept → `--keep`/`--junk` → your `junk-catalog.md` → anti-slop baseline. Runs on pending git changes (or `--full`) behind a temporary checkpoint commit, then asks Accept/Reject. |
+| `jk:prune-comments` | Remove junk code comments and tighten the valuable ones without touching code. Tiered rules: tool directives always kept → `--keep`/`--junk` → your `junk-catalog.md` → anti-slop baseline. Runs on pending git changes (or `--full`) behind a temporary checkpoint commit, then asks Accept/Reject. Ships a realtime `PostToolUse` hook (Claude Code only) that flags obvious junk right after each Write/Edit; turn off with plugin option `prune_comments_hook=false`. |
 
 ## Usage examples
 
@@ -122,7 +122,9 @@ Old `/ckc:*` commands now resolve to `/jk:*`.
 plugins/
   jk/
     .claude-plugin/
-      plugin.json           # plugin manifest
+      plugin.json           # plugin manifest (+ userConfig toggles)
+    hooks/
+      hooks.json            # PostToolUse → prune-comments realtime hint
     skills/
       learn/
         SKILL.md            # name: jk:learn

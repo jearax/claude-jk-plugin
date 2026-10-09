@@ -63,6 +63,10 @@ Evaluate each comment top-down and stop at the first verdict. Within one tier, K
 
 Tighten only comments kept at T3 or matched by no tier, following [`references/tighten-rules.md`](references/tighten-rules.md). Read `junk-catalog.md` on every run: it is the owner's file and changes between runs. Empty template sections mean no T2 rules.
 
+## Realtime hook
+
+The plugin also ships a `PostToolUse` hook (`hooks/hooks.json` → [`scripts/comment-lint-hook.py`](scripts/comment-lint-hook.py)). After each Write/Edit it checks the text just written in tier order (T0 keep, then the optional `Regex` lines of `junk-catalog.md` for T2 keep and junk, then obvious T3 junk) and reports matches as context for Claude to remove; it never edits files. T0/T3 regexes and the scope ignore rules live in [`references/patterns.json`](references/patterns.json), shared with the checkpoint script. Users turn it off with the plugin option `prune_comments_hook=false`. The hook covers the obvious subset only; this skill remains the full pass with T2 and accept/reject.
+
 ## Failure modes this skill guards against
 
 - **Deleting a directive** (`@ts-expect-error`, `eslint-disable-next-line`, `//go:build`) breaks lint or the build. T0 runs first for that reason.

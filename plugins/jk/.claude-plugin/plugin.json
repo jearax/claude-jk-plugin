@@ -6,5 +6,13 @@
     "name": "jjuidev"
   },
   "homepage": "https://github.com/jearax/claude-jk-plugin",
-  "repository": "https://github.com/jearax/claude-jk-plugin"
+  "repository": "https://github.com/jearax/claude-jk-plugin",
+  "userConfig": {
+    "prune_comments_hook": {
+      "type": "boolean",
+      "title": "Realtime junk-comment hints",
+      "description": "After Write/Edit, flag obvious junk comments the AI just wrote so it removes them (jk:prune-comments). Set false to turn off.",
+      "default": true
+    }
+  }
 }

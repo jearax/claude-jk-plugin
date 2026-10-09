@@ -1,6 +1,6 @@
 # Antislop baseline (tier 3)
 
-Adapted from the `antislop-code` skill in [miqdadbadjuber/anti-slop](https://github.com/miqdadbadjuber/anti-slop) (MIT). Upstream core references were removed and AI-specific patterns were added. This tier only sees comments that tiers 0–2 left undecided.
+Adapted from the `antislop-code` skill in [miqdadbadjuber/anti-slop](https://github.com/miqdadbadjuber/anti-slop) (MIT). Upstream core references were removed and AI-specific patterns were added. This tier only sees comments that tiers 0–2 left undecided. The high-precision subset of this table also exists as regexes in `patterns.json` → `junk` for the realtime hook.
 
 The test behind every pattern: if deleting the comment loses no information the code does not already show, it is junk.
 

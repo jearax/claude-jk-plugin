@@ -4,6 +4,8 @@ Comments that tools read. Deleting or rewording one changes lint, type, build, c
 
 Override: when `--junk` names one of these patterns explicitly (for example `--junk "unused eslint-disable"`), delete only the matching comments and mark each row ⚠ in the summary. A vague `--junk` never overrides tier 0.
 
+The regex form of this list, used by the realtime hook, is `patterns.json` → `keep`. Keep both in sync when adding a pattern.
+
 ## Lint and type directives
 
 `eslint-disable`, `eslint-disable-next-line`, `eslint-enable`, `/* eslint ... */` config, `/* global ... */`, `@ts-expect-error`, `@ts-ignore`, `@ts-nocheck`, `@ts-check`, `biome-ignore`, `prettier-ignore`, `stylelint-disable`, `# noqa`, `# type: ignore`, `# pyright:`, `# mypy:`, `# pylint:`, `# fmt: off` / `# fmt: on`, `# isort:`, `// nolint`, `//nolint`, `// NOSONAR`, `rubocop:disable`, `// swiftlint:`, `// @phpstan-`, `<!-- markdownlint-disable -->`.
