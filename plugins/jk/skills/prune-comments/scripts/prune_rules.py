@@ -8,6 +8,8 @@ import json
 import os
 import re
 
+from comment_echo import EchoConfig
+
 REFERENCES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "references")
 PATTERNS_PATH = os.path.join(REFERENCES_DIR, "patterns.json")
 CATALOG_PATH = os.path.join(REFERENCES_DIR, "junk-catalog.md")
@@ -53,6 +55,7 @@ class Rules:
         self.marker_by_ext = {ext: marker for marker, exts in data["comment_syntax"].items() for ext in exts}
         self.keep = [re.compile(p["regex"], re.I) for p in data["keep"]]
         self.junk = [(p["label"], re.compile(p["regex"], re.I)) for p in data["junk"]]
+        self.echo = EchoConfig(data["echo"])
         self.user_keep, self.user_junk = parse_catalog(catalog_path)
 
     def is_ignored(self, rel_path):

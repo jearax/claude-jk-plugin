@@ -3,22 +3,26 @@
 
 Reads the hook payload on stdin. Scans only the new text (Write `content`, Edit `new_string`,
 MultiEdit `edits[].new_string`) in tier order: T0 keep (patterns.json), T2 keep and junk (Regex lines
-of junk-catalog.md), then T3 junk (patterns.json). Matches go out as `additionalContext` so Claude
-can remove them itself. Never edits
-files, never blocks, and exits 0 silently on any internal error.
+of junk-catalog.md), then T3 junk (patterns.json), then the echo check (comment_echo.py) for comments
+that only restate the code they describe. Matches go out as `additionalContext` so Claude can remove
+them itself. Never edits files, never blocks, and exits 0 silently on any internal error.
 
 Disable with plugin option prune_comments_hook=false (env CLAUDE_PLUGIN_OPTION_PRUNE_COMMENTS_HOOK).
 """
 import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from comment_echo import restates  # noqa: E402
 from prune_rules import Rules  # noqa: E402
 
 TOGGLE_ENV = "CLAUDE_PLUGIN_OPTION_PRUNE_COMMENTS_HOOK"
-MAX_FINDINGS = 10
+MAX_FINDINGS = 30
+ECHO_LABEL = "your rule: states what, not why"
 DOC_PREFIXES = {"//": ("///", "//!"), "#": ("#!",), "--": ()}
+BLOCK_LINE = re.compile(r"^(?:/\*\*?|\*(?=\s|/|$))(?!/)\s?(.*?)\s*(?:\*/)?$")
 
 
 def enabled(env):
@@ -31,30 +35,55 @@ def _quotes_balanced(code):
 
 
 def extract_comment(line, marker):
+    """Return (body, code) for a comment line, code being None for a whole-line comment; None for code only."""
     stripped = line.strip()
     if stripped.startswith(marker):
         if stripped.startswith(DOC_PREFIXES[marker]):
-            return None
-        return stripped[len(marker):].strip()
+            return "", None
+        return stripped[len(marker):].strip(), None
+    if marker == "//" and BLOCK_LINE.match(stripped):
+        return BLOCK_LINE.match(stripped).group(1).strip(), None
     idx = line.find(" " + marker)
     while idx != -1:
         code = line[:idx]
         if code.strip() and _quotes_balanced(code):
-            return line[idx + 1 + len(marker):].strip()
+            return line[idx + 1 + len(marker):].strip(), code
         idx = line.find(" " + marker, idx + 1)
     return None
 
 
-def scan(text, marker, rules, first_line):
-    findings = []
-    for offset, line in enumerate(text.splitlines()):
-        body = extract_comment(line, marker)
-        if not body or any(k.search(body) for k in rules.keep + rules.user_keep):
+def _described_code(lines, parsed, offset):
+    """The code a whole-line comment sits above: the next non-blank line that is not itself a comment."""
+    for line, hit in zip(lines[offset + 1:], parsed[offset + 1:]):
+        if not line.strip() or (hit and hit[1] is None):
             continue
-        for label, pattern in rules.user_junk + rules.junk:
-            if pattern.search(body):
-                findings.append((first_line + offset if first_line else None, line.strip(), label))
-                break
+        return hit[1] if hit else line
+    return None
+
+
+def _junk_label(body, rules):
+    for label, pattern in rules.user_junk + rules.junk:
+        if pattern.search(body):
+            return label
+    return None
+
+
+def scan(text, marker, rules, first_line):
+    lines = text.splitlines()
+    parsed = [extract_comment(line, marker) for line in lines]
+    findings = []
+    for offset, (line, hit) in enumerate(zip(lines, parsed)):
+        if not hit or not hit[0]:
+            continue
+        body, code = hit
+        if any(k.search(body) for k in rules.keep + rules.user_keep):
+            continue
+        label = _junk_label(body, rules)
+        if not label:
+            described = code if code is not None else _described_code(lines, parsed, offset)
+            label = ECHO_LABEL if restates(body, described, rules.echo) else None
+        if label:
+            findings.append((first_line + offset if first_line else None, line.strip(), label))
     return findings
 
 

@@ -65,7 +65,7 @@ Tighten only comments kept at T3 or matched by no tier, following [`references/t
 
 ## Realtime hook
 
-The plugin also ships a `PostToolUse` hook (`hooks/hooks.json` → [`scripts/comment-lint-hook.py`](scripts/comment-lint-hook.py)). After each Write/Edit it checks the text just written in tier order (T0 keep, then the optional `Regex` lines of `junk-catalog.md` for T2 keep and junk, then obvious T3 junk) and reports matches as context for Claude to remove; it never edits files. T0/T3 regexes and the scope ignore rules live in [`references/patterns.json`](references/patterns.json), shared with the checkpoint script. Users turn it off with the plugin option `prune_comments_hook=false`. The hook covers the obvious subset only; this skill remains the full pass with T2 and accept/reject.
+The plugin also ships a `PostToolUse` hook (`hooks/hooks.json` → [`scripts/comment-lint-hook.py`](scripts/comment-lint-hook.py)). After each Write/Edit it checks the text just written in tier order (T0 keep, then the optional `Regex` lines of `junk-catalog.md` for T2 keep and junk, then obvious T3 junk, then an echo check for short comments whose words mostly repeat the identifiers of the code they describe) and reports matches as context for Claude to remove; it never edits files. T0/T3 regexes and the scope ignore rules live in [`references/patterns.json`](references/patterns.json), shared with the checkpoint script. Users turn it off with the plugin option `prune_comments_hook=false`. The hook covers the obvious subset only; this skill remains the full pass with T2 and accept/reject.
 
 ## Failure modes this skill guards against
 

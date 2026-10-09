@@ -96,10 +96,10 @@ class TestDetection(HookCase):
         self.assertIsNone(self.run_write("lib.rs", "/// Step 1 of the protocol handshake.\npub fn a() {}\n"))
 
     def test_findings_capped(self):
-        text = "".join(f"// Step {i}\nx{i} = {i}\n" for i in range(1, 15))
+        text = "".join(f"// Step {i}\nx{i} = {i}\n" for i in range(1, 35))
         ctx = self.context(self.run_write("many.js", text))
         self.assertIn("+4 more", ctx)
-        self.assertEqual(ctx.count("\n- L"), 10)
+        self.assertEqual(ctx.count("\n- L"), hook.MAX_FINDINGS)
 
 
 class TestScope(HookCase):
@@ -195,6 +195,68 @@ class TestUserCatalog(HookCase):
             self.assertTrue(self.scan(RULES, line), line)
         for line in kept:
             self.assertEqual(self.scan(RULES, line), [], line)
+
+
+class TestEcho(HookCase):
+    def labels(self, text):
+        return {line: label for _, line, label in hook.scan(text, "//", RULES, 1)}
+
+    def test_flags_comments_that_restate_code(self):
+        text = (
+            "// Import the cn utility function from the utils module\n"
+            "import { cn } from '@/utils/cn';\n"
+            "interface P {\n"
+            "  // Optional className\n"
+            "  className?: string;\n"
+            "}\n"
+            "/** This is the Badge component */\n"
+            "export function Badge() {\n"
+            "  let total = 0; // store total\n"
+            "  // Add the item to the total\n"
+            "  total += item;\n"
+            "  // Return the JSX\n"
+            "  return <span />;\n"
+            "}\n"
+        )
+        found = self.labels(text)
+        for line in ("// Import the cn utility function from the utils module", "// Optional className",
+                     "/** This is the Badge component */", "let total = 0; // store total",
+                     "// Add the item to the total", "// Return the JSX"):
+            self.assertEqual(found.get(line), hook.ECHO_LABEL, line)
+
+    def test_why_and_facts_absent_from_code_are_kept(self):
+        text = (
+            "// Safari needs a tick before focus\n"
+            "setTimeout(focus, 0)\n"
+            "// Lock order: account then wallet, otherwise transfers deadlock\n"
+            "lock(account); lock(wallet)\n"
+            "const TIMEOUT = 30 // seconds\n"
+            "// Đơn hàng quá 30 ngày không được hoàn tiền\n"
+            "if (order.ageDays > 30) return deny()\n"
+            "// Empty user means guest checkout\n"
+            "if (!user) return guestFlow()\n"
+            "/** Returns the price in cents; throws RangeError when qty < 1. */\n"
+            "export function quote(qty) {}\n"
+            "// TODO(#42): drop once the API returns totals\n"
+            "const total = sum(items)\n"
+        )
+        self.assertEqual(self.labels(text), {})
+
+    def test_comment_with_no_code_below_is_not_echo_checked(self):
+        self.assertEqual(self.labels("const a = 1\n// Return the result\n"), {})
+
+    def test_doc_tag_echo(self):
+        found = self.labels("// @param a - the first number\n// @returns the sum of a and b\n"
+                            "// @returns the price in cents\nfunction add(a, b) {}\n")
+        self.assertEqual(len(found), 2)
+        self.assertNotIn("// @returns the price in cents", found)
+
+    def test_vague_todo_with_hedge(self):
+        self.assertEqual(self.labels("// TODO: maybe optimize this later?\nx()\n"),
+                         {"// TODO: maybe optimize this later?": "vague TODO"})
+
+    def test_generator_method_is_not_a_block_comment(self):
+        self.assertEqual(self.labels("class A {\n  *items() { yield 1 }\n}\n"), {})
 
 
 class TestCli(HookCase):
