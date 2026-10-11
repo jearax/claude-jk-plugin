@@ -1,15 +1,15 @@
 {
   "skill": "prune-comments",
   "version": "1.0.0",
-  "description": "Eval cases for prune-comments: trigger accuracy, tier precedence, tightening fidelity, code safety, and the checkpoint accept/reject contract.",
+  "description": "Eval cases for prune-comments: trigger accuracy, tier precedence, tightening fidelity, code safety, and the pending-changes-only scope.",
   "cases": [
     {
       "id": "trigger-en",
       "prompt": "clean up the AI comments in my pending changes",
       "intent": "English trigger: activates jk:prune-comments on the pending diff.",
       "assertions": [
-        "Runs `git-checkpoint.py status` then `begin` without --full.",
-        "Ends with an Accept/Reject question."
+        "Runs `list-changed-files.py` and scopes to the pending diff.",
+        "Applies the edits directly and ends with the summary; asks no Accept/Reject question."
       ]
     },
     {
@@ -96,37 +96,37 @@
       "intent": "Trailing comment removal never alters code or string literals.",
       "assertions": [
         "Lines become `const url = \"http://x.io\";` and `total = a + b`.",
-        "`git diff <ckpt>` contains no change to any string literal or expression."
+        "No Edit changes any string literal or expression."
       ]
     },
     {
-      "id": "no-changes-asks",
+      "id": "no-changes-stops",
       "prompt": "/jk:prune-comments",
       "fixture": "clean working tree",
-      "intent": "No pending changes → ask instead of guessing.",
+      "intent": "No pending changes → stop and tell the user.",
       "assertions": [
-        "`begin` exits 2 with no-changes.",
-        "Asks the user whether to scan the whole tree or stop; does not run --full on its own."
+        "`list-changed-files.py` exits 2 with no-changes.",
+        "Reports that there are no pending git changes and stops without reading or editing any file."
       ]
     },
     {
-      "id": "reject-restores",
-      "prompt": "/jk:prune-comments → user answers Reject",
-      "fixture": "pending changes with one file partially staged and one untracked file",
-      "intent": "Reject returns the repo to the exact pre-run state.",
-      "assertions": [
-        "`reject` exits 0.",
-        "File contents, `git status --porcelain`, and `git write-tree` match the pre-run values.",
-        "No checkpoint commit remains in `git log`."
-      ]
-    },
-    {
-      "id": "interrupted-run-recovered",
+      "id": "not-a-repo-stops",
       "prompt": "/jk:prune-comments",
-      "fixture": "state file from a previous unfinished run",
-      "intent": "Pending checkpoint is resolved before new work.",
+      "fixture": "directory that is not a git repository, with source files containing junk comments",
+      "intent": "Outside git → stop and tell the user.",
       "assertions": [
-        "Reports the pending run and asks Accept/Reject for it before calling `begin`."
+        "`list-changed-files.py` exits 1 with not-a-repo.",
+        "No file is edited."
+      ]
+    },
+    {
+      "id": "no-git-writes",
+      "prompt": "/jk:prune-comments",
+      "fixture": "pending changes with one file partially staged and one untracked file, both containing junk comments",
+      "intent": "Edits land in the working tree; git state is never written.",
+      "assertions": [
+        "HEAD and `git write-tree` are unchanged after the run.",
+        "The untracked file is still untracked; the staged part of the partial file is still staged."
       ]
     },
     {
