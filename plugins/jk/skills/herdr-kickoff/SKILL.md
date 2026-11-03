@@ -68,7 +68,7 @@ Parse every id from the JSON the commands print, never from memory. Batch the sh
 
    `herdr agent wait <pane> --timeout 20000` polls one pane, but judge it by its JSON payload, never its exit code — it can exit non-zero on a healthy agent. Let the think-time between turns pace the polls; a still-absent pane after ~2 minutes is a dead exec: report the exec name, leave that tab a plain shell. Name each detected agent after its role: `herdr agent rename <pane> planner` / `cooker`. Names are unique per workspace in 0.9.5, not server-wide; keep the `-2`, then `-3` retry only for a same-workspace clash, expected rare. Use the final names everywhere below.
 
-5. **Prime the planner.** Skip with `--no-agents` or a dead planner. Read [`references/planner-prime.md`](references/planner-prime.md), substitute `<cooker-name>` with the live cooker name, and submit without `--wait`:
+5. **Prime the planner.** Skip with `--no-agents` or a dead planner. Read [`references/planner-prime.md`](references/planner-prime.md), substitute `<planner-name>` and `<cooker-name>` with the live agent names, and submit without `--wait`:
 
    ```bash
    herdr agent prompt planner "<primed-text>"
