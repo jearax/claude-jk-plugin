@@ -6,3 +6,6 @@ __pycache__/
 .idea/
 .vscode/
 node_modules/
+
+# Local working notes: plans and reports stay out of git
+plans/
